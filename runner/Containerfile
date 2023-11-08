@@ -1,0 +1,3 @@
+# SPDX-License-Identifier: GPL-3.0-only
+FROM fedora:39
+RUN dnf -y update && dnf -y install file qemu && dnf clean all

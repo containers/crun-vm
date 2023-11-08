@@ -1,0 +1,29 @@
+[package]
+name = "crun-qemu"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.74"
+license = "GPL-3.0-only"
+
+[dependencies.clap]
+version = "4.0"
+default-features = false
+features = ["cargo", "derive", "std"]
+
+[dependencies.liboci-cli]
+version = "0.3.0"
+default-features = false
+
+[dependencies.libocispec]
+# git = "https://github.com/containers/libocispec"
+# rev = "3d168261f250477061fe0eb3648bf998c70c6519"
+
+# TODO: contribute the necessary changes upstream
+git = "https://github.com/albertofaria/libocispec"
+rev = "3d1e44e26d6fd50a9ba33f9cc6dd49992c429e9f"
+
+# TODO: maybe we can use https://github.com/containers/oci-spec-rs instead
+
+[dependencies.tar]
+version = "0.4"
+default-features = false
