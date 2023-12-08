@@ -25,5 +25,5 @@ rev = "3d1e44e26d6fd50a9ba33f9cc6dd49992c429e9f"
 # TODO: maybe we can use https://github.com/containers/oci-spec-rs instead
 
 [dependencies.tar]
-version = "0.4"
+version = "0.4.27"
 default-features = false
