@@ -101,7 +101,7 @@ pub fn create(
 
     // create runner container
 
-    crun_create(&global_args, &args)?;
+    crun_create(global_args, args)?;
 
     Ok(())
 }

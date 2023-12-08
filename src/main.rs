@@ -24,17 +24,17 @@ struct Args {
 #[derive(clap::Parser, Debug)]
 enum Command {
     #[clap(flatten)]
-    Standard(liboci_cli::StandardCmd),
+    Standard(Box<liboci_cli::StandardCmd>),
 
     #[clap(flatten)]
-    Common(liboci_cli::CommonCmd),
+    Common(Box<liboci_cli::CommonCmd>),
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
     let parsed_args = Args::parse();
 
     if let Command::Standard(cmd) = parsed_args.command {
-        if let liboci_cli::StandardCmd::Create(create_args) = cmd {
+        if let liboci_cli::StandardCmd::Create(create_args) = *cmd {
             return create::create(&parsed_args.global, &create_args);
         }
     }
