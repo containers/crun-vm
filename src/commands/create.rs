@@ -168,7 +168,15 @@ pub fn create(
             }
         }
 
-        for path in ["/bin", "/dev/log", "/etc/pam.d", "/lib", "/lib64", "/usr"] {
+        for path in [
+            "/bin",
+            "/dev/log",
+            "/dev/vfio",
+            "/etc/pam.d",
+            "/lib",
+            "/lib64",
+            "/usr",
+        ] {
             mounts.push(
                 oci_spec::runtime::MountBuilder::default()
                     .typ("bind")
@@ -229,7 +237,7 @@ pub fn create(
         &block_devices,
         &virtiofs_mounts,
         needs_cloud_init,
-        custom_options.ignition.is_some(),
+        &custom_options,
         &spec,
     )?;
 
@@ -247,6 +255,9 @@ struct CustomOptions {
 
     #[clap(long)]
     ignition: Option<PathBuf>,
+
+    #[clap(long)]
+    vfio_pci_mdev: Vec<PathBuf>,
 }
 
 /// Returns `true` if a cloud-init config should be passed to the VM.
@@ -488,7 +499,7 @@ fn write_domain_xml(
     block_devices: &[BlockDevice],
     virtiofs_mounts: &[VirtiofsMount],
     needs_cloud_init: bool,
-    has_ignition_config: bool,
+    custom_options: &CustomOptions,
     spec: &oci_spec::runtime::Spec,
 ) -> Result<(), Box<dyn Error>> {
     // section
@@ -551,7 +562,7 @@ fn write_domain_xml(
             st(w, "type", &[("arch", "x86_64"), ("machine", "q35")], "hvm")
         })?;
 
-        if has_ignition_config {
+        if custom_options.ignition.is_some() {
             // fw_cfg requires ACPI
             s(w, "features", &[], |w| se(w, "acpi", &[]))?;
 
@@ -646,6 +657,39 @@ fn write_domain_xml(
                     se(w, "target", &[("dir", &mount.target)])?;
                     Ok(())
                 })?;
+            }
+
+            // TODO: Check if these are reasonably paths to the sysfs dir for a PCI mdev device.
+            // TODO: Avoid all the unwrap()s.
+            let vfio_pci_mdev_uuids: Vec<_> = custom_options
+                .vfio_pci_mdev
+                .iter()
+                .map(|path| {
+                    Ok(path
+                        .canonicalize()?
+                        .file_name()
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .to_string())
+                })
+                .collect::<io::Result<_>>()?;
+
+            for uuid in vfio_pci_mdev_uuids {
+                s(
+                    w,
+                    "hostdev",
+                    &[
+                        ("mode", "subsystem"),
+                        ("type", "mdev"),
+                        ("model", "vfio-pci"),
+                    ],
+                    |w| {
+                        s(w, "source", &[], |w| {
+                            se(w, "address", &[("uuid", uuid.as_ref())])
+                        })
+                    },
+                )?;
             }
 
             Ok(())

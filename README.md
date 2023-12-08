@@ -174,6 +174,21 @@ $ podman run \
 You can also pass them in as bind mounts using the `-v`/`--volume` or `--mount`
 flags.
 
+### Mediated (mdev) vfio-pci devices
+
+Mediated vfio-pci devices (such as vGPUs) can be passed through to the VM by
+specifying the non-standard `--vfio-pci-mdev` option with a path to the mdev's
+sysfs directory:
+
+```console
+$ podman run \
+    --runtime "$PWD"/target/debug/crun-qemu \
+    --security-opt label=disable \
+    -it --rm \
+    quay.io/containerdisks/fedora:39 \
+    --vfio-pci-mdev /sys/bus/pci/devices/0000:00:02.0/5fa530b9-9fdf-4cde-8eb7-af73fcdeeaae
+```
+
 ## How it works
 
 Internally, the `crun-qemu` runtime uses [crun] to run a different container
