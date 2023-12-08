@@ -1,10 +1,9 @@
 # The `crun-qemu` OCI runtime
 
 This is an **experimental** [OCI Runtime] implementation that enables `podman
-run` (and maybe also `docker run`) to work with VM images packaged in container
-images. The objective is to make running VMs (in simple configurations) as easy
-as running containers, while leveraging the existing container image
-distribution infrastructure.
+run` to work with VM images packaged in container images. The objective is to
+make running VMs (in simple configurations) as easy as running containers, while
+leveraging the existing container image distribution infrastructure.
 
 The runtime expects container images to contain a VM image file under a `/disk`
 directory. The image file can have any name and must be in *raw* format. No
