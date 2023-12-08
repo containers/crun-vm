@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: GPL-3.0-only
+
+.test:
+  stage: test
+  only:
+  - branches
+  - merge_requests
+  before_script:
+    - apt-get update -qy
+    - apt-get install -qy podman
+    - |
+      # switch to iptables, as GitLab CI doesn't support nftables
+      apt-get install -qy --no-install-recommends iptables
+      update-alternatives --set iptables /usr/sbin/iptables-legacy
+
+rust-stable:
+  extends: .test
+  image: rust:latest
+  script:
+    - rustup component add clippy rustfmt
+    - ./test.sh
+
+rust-1.74:
+  extends: rust-stable
+  image: rust:1.74
+
+minimum-dependency-versions:
+  extends: .test
+  image: rust:1.74
+  script:
+    - rustup toolchain add nightly
+    - cargo +nightly install cargo-hack cargo-minimal-versions --locked
+    - cargo minimal-versions check --workspace
