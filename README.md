@@ -4,23 +4,25 @@ This is an **experimental** [OCI Runtime] that enables `podman run` to work with
 VM images. The objective is to make running VMs (in simple configurations) as
 easy as running containers.
 
-## Trying it out
-
-First build the runtime:
+## Building the runtime
 
 ```console
 $ dnf install bash coreutils crun genisoimage libvirt-client libvirt-daemon-driver-qemu libvirt-daemon-log qemu-img shadow-utils util-linux virtiofsd
 $ cargo build
 ```
 
-Then obtain a QEMU-compatible VM image and place it in a directory by itself:
+## Booting VMs
+
+### From regular VM image files
+
+First, obtain a QEMU-compatible VM image and place it in a directory by itself:
 
 ```console
 $ mkdir my-vm-image
 $ curl -LO --output-dir my-vm-image https://download.fedoraproject.org/pub/fedora/linux/releases/39/Cloud/x86_64/images/Fedora-Cloud-Base-39-1.5.x86_64.qcow2
 ```
 
-And try it out:
+Then try it out:
 
 ```console
 $ podman run \
@@ -43,12 +45,12 @@ $ podman attach --latest
 This command also works when you start the VM in detached mode using
 podman-run's `-d`/`--detach` flags.
 
-It's also possible to omit flags `-i`/`--interactive` and `-t`/`-tty` to
+It's also possible to omit flags `-i`/`--interactive` and `-t`/`--tty` to
 podman-run, in which case you won't be able to interact with the VM but can
 still observe its console. Note that pressing `ctrl-]` will have no effect, so
 use `podman container rm --force --time=0 ...` to terminate the VM instead.
 
-## Using containerized VM images
+## From VM image files packaged into container images
 
 This runtime also works with container images that contain a VM image file with
 any name under `/` or under `/disk/`. No other files may exist in those
@@ -68,31 +70,14 @@ You can also use `util/package-vm-image.sh` to easily package a VM image into a
 container image, and `util/extract-vm-image.sh` to extract a VM image contained
 in a container image.
 
-## Bind mounts
+## First-boot customization
 
-Bind mounts are passed through to the VM as [virtiofs] file systems:
+### cloud-init
 
-```console
-$ podman run \
-    --runtime "$PWD"/target/debug/crun-qemu \
-    --security-opt label=disable \
-    -it --rm \
-    -v ./util:/home/fedora/util \
-    quay.io/containerdisks/fedora:39 \
-    ""
-```
-
-If the VM image support cloud-init, the volume will automatically be mounted
-inside the guest at the given path. Otherwise, you can mount it with:
-
-```console
-mount -t virtiofs /home/fedora/util /home/fedora/util
-```
-
-## cloud-init
-
-You can provide a [cloud-init] NoCloud configuration to the VM by configuring a
-bind mount with the special destination `/cloud-init`:
+In the examples above, you were able to boot the VM but not to login. To fix
+this and do other first-boot customization, you can provide a [cloud-init]
+NoCloud configuration to the VM by configuring a bind mount with the special
+destination `/cloud-init`:
 
 ```console
 $ ls examples/cloud-init/config/
@@ -109,7 +94,7 @@ $ podman run \
 You should now be able to login with the default `fedora` username and password
 `pass`.
 
-## Ignition
+### Ignition
 
 Similarly, you can provide an [Ignition] configuration to the VM by configuring
 a bind mount with the special destination `/ignition`:
@@ -128,8 +113,9 @@ You should now be able to login with the default `core` username and password
 
 ## SSH'ing into the VM
 
-Assuming the VM supports cloud-init, you can SSH into it using podman-exec
-as whatever user cloud-init considers to be the default for your VM image:
+Assuming the VM supports cloud-init and runs an SSH server, you can SSH into it
+using podman-exec as whatever user cloud-init considers to be the default for
+your VM image:
 
 ```console
 $ podman exec --latest fedora
@@ -145,10 +131,35 @@ If you actually just want to exec into the container in which the VM is running
 (probably to debug some problem with `crun-qemu` itself), pass in `-` as the
 username.
 
-## Passing block devices through to the VM
+## Passing things through to the VM
+
+### Directory bind mounts
+
+Bind mounts are passed through to the VM as [virtiofs] file systems:
+
+```console
+$ podman run \
+    --runtime "$PWD"/target/debug/crun-qemu \
+    --security-opt label=disable \
+    -it --rm \
+    -v ./util:/home/fedora/util \
+    quay.io/containerdisks/fedora:39 \
+    --cloud-init examples/cloud-init/config
+```
+
+If the VM image support cloud-init, the volume will automatically be mounted
+inside the guest at the given destination path. Otherwise, you can mount it
+manually with:
+
+```console
+mount -t virtiofs /home/fedora/util /home/fedora/util
+```
+
+### Block devices
 
 If cloud-init is available, it is possible to pass block devices through to the
-VM at a specific path using podman-run's `--device` flag:
+VM at a specific path using podman-run's `--device` flag (this example assumes
+`/dev/ram0` to exist and to be accessible by the current user):
 
 ```console
 $ podman run \
@@ -157,7 +168,7 @@ $ podman run \
     -it --rm \
     --device /dev/ram0:/path/in/vm/my-disk \
     quay.io/containerdisks/fedora:39 \
-    ""
+    --cloud-init examples/cloud-init/config
 ```
 
 You can also pass them in as bind mounts using the `-v`/`--volume` or `--mount`
