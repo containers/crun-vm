@@ -5,6 +5,9 @@
   only:
   - branches
   - merge_requests
+  tags:
+    # use runners with more memory to avoid OOM during compilation
+    - saas-linux-medium-amd64
   before_script:
     - apt-get update -qy
     - apt-get install -qy podman
