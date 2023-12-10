@@ -5,10 +5,10 @@ run` to work with VM images packaged in container images. The objective is to
 make running VMs (in simple configurations) as easy as running containers, while
 leveraging the existing container image distribution infrastructure.
 
-The runtime expects container images to contain a VM image file under a `/disk`
-directory. The image file can have any name and must be in *raw* format. No
-other files may exist under `/disk`. (This is the convention followed by
-KubeVirt `containerDisk`s, so you can use those containers with this runtime.)
+The runtime expects container images to contain a VM image file with any name
+under a `/disk` directory. No other files may exist under `/disk`. (This is the
+convention followed by KubeVirt `containerDisk`s, so you can use those
+containers with this runtime.)
 
 Eventually we could make the runtime work with VM images distributed as [OCI
 Artifacts]. This would make the work of packaging the VM image into a container

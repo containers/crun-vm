@@ -53,10 +53,8 @@ pub fn create(
             "cores=2",
             "-m",
             "2G",
-            "--blockdev",
-            "driver=file,node-name=boot,filename=/vm-image",
-            "--device",
-            "virtio-blk-pci-non-transitional,drive=boot,bootindex=1",
+            "--drive",
+            "file=/vm-image,if=virtio,media=disk",
             "--nographic",
         ]
         .iter()
