@@ -15,5 +15,5 @@ indent_style = tab
 indent_style = tab
 indent_size = 8
 
-[*.{md,rst,txt,yaml,yml}]
+[*.{md,rst,txt,xml,yaml,yml}]
 indent_size = 2
