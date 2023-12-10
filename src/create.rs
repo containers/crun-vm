@@ -9,12 +9,14 @@ pub fn create(
     global_args: &liboci_cli::GlobalOpts,
     args: &liboci_cli::Create,
 ) -> Result<(), Box<dyn Error>> {
-    let mut spec = libocispec::runtime::Spec::load(
-        args.bundle
-            .join("config.json")
-            .to_str()
-            .expect("path is utf-8"),
-    )?;
+    let config_path = args
+        .bundle
+        .join("config.json")
+        .to_str()
+        .expect("path is utf-8")
+        .to_string();
+
+    let mut spec = libocispec::runtime::Spec::load(&config_path)?;
 
     // find VM image
 
@@ -90,12 +92,7 @@ pub fn create(
         uid_mappings: None,
     });
 
-    spec.save(
-        args.bundle
-            .join("config.json")
-            .to_str()
-            .expect("path is utf-8"),
-    )?;
+    spec.save(&config_path)?;
 
     // create runner container
 
