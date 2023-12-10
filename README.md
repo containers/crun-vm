@@ -39,6 +39,25 @@ ctrl-q`. Afterwards, reattach by running:
 $ podman attach --latest
 ```
 
+## Using your own VM images
+
+Use the `package-vm-image.sh` script to package a VM image file into a container
+image:
+
+```console
+$ ./package-vm-image.sh
+Usage: ./package-vm-image.sh <vm_image_file> <container_image_tag>
+Package a given VM image file into a container image and tag it.
+
+$ ./package-vm-image.sh my-vm-image.qcow2 my-vm-container-image:v1
+STEP 1/2: FROM scratch
+STEP 2/2: COPY 'my-vm-image.qcow2' /disk/image
+COMMIT my-vm-container-image:v1
+--> 0b6a775fdc37
+Successfully tagged localhost/my-vm-container-image:v1
+0b6a775fdc377c0ec65fb67b54c524c707718f50193fa513a2e309aa08424635
+```
+
 ## How it works
 
 Internally, the `crun-qemu` runtime uses [crun] to run a different container
