@@ -18,13 +18,13 @@ unnecessary.
 
 ```console
 $ cargo build
-$ podman run --security-opt label=disable --rm -it --runtime="$PWD"/target/debug/crun-qemu quay.io/kubevirt/alpine-container-disk-demo unused
+$ podman run --security-opt label=disable --rm -it --runtime="$PWD"/target/debug/crun-qemu quay.io/containerdisks/fedora:39 unused
 ```
 
 This command is handy for development:
 
 ```console
-$ cargo build && RUST_BACKTRACE=1 podman run --log-level=debug --security-opt label=disable --rm -it --runtime="$PWD"/target/debug/crun-qemu quay.io/kubevirt/alpine-container-disk-demo unused
+$ cargo build && RUST_BACKTRACE=1 podman run --log-level=debug --security-opt label=disable --rm -it --runtime="$PWD"/target/debug/crun-qemu quay.io/containerdisks/fedora:39 unused
 ```
 
 ## How it works
