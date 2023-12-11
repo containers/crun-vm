@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use std::error::Error;
+use std::fs;
 use std::io;
+use std::os::unix::fs::MetadataExt;
 
 use crate::util::{crun, extract_runner_root_into, find_single_file_in_directory};
 
@@ -66,11 +68,13 @@ pub fn create(
 
     let linux = spec.linux.as_mut().expect("linux config");
     let devices = linux.devices.get_or_insert_with(Vec::new);
+
+    let kvm_major_minor = fs::metadata("/dev/kvm")?.rdev();
     devices.push(libocispec::runtime::LinuxDevice {
         file_mode: None,
         gid: None,
-        major: Some(10),
-        minor: Some(232),
+        major: Some((kvm_major_minor >> 8).try_into().unwrap()),
+        minor: Some((kvm_major_minor & 0xff).try_into().unwrap()),
         path: "/dev/kvm".to_string(),
         device_type: "char".to_string(),
         uid: None,
