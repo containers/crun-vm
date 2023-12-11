@@ -444,6 +444,19 @@ fn set_up_extra_container_mounts_and_devices(spec: &mut oci_spec::runtime::Spec)
         add_bind_mount(spec, path);
     }
 
+    // If virsh runs with a tty and finds an executable at /usr/bin/pkttyagent, it will attempt to
+    // run it even if polkit auth is disabled, resulting in "Authorization not available. Check if
+    // polkit service is running or see debug message for more information." messages.
+    spec.mounts_push(
+        oci_spec::runtime::MountBuilder::default()
+            .typ("bind")
+            .source("/dev/null")
+            .destination("/usr/bin/pkttyagent")
+            .options(["bind".to_string(), "rprivate".to_string(), "ro".to_string()])
+            .build()
+            .unwrap(),
+    );
+
     add_bind_mount(spec, "/dev/kvm");
     add_char_dev(spec, "/dev/kvm")?;
 
