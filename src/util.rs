@@ -3,7 +3,9 @@
 use std::ffi::OsStr;
 use std::io::{self, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
+
+use serde::Deserialize;
 
 pub fn find_single_file_in_directory(dir_path: impl AsRef<Path>) -> io::Result<PathBuf> {
     let mut candidate = None;
@@ -40,6 +42,28 @@ pub fn extract_runner_root_into(dir_path: impl AsRef<Path>) -> io::Result<()> {
     tar::Archive::new(tar_reader).unpack(dir_path)?;
 
     Ok(())
+}
+
+pub fn get_image_format(image_path: impl AsRef<Path>) -> io::Result<String> {
+    let output = Command::new("qemu-img")
+        .arg("info")
+        .arg("--output=json")
+        .arg(image_path.as_ref().as_os_str())
+        .stdout(Stdio::piped())
+        .output()?;
+
+    if !output.status.success() {
+        return Err(io::Error::other("qemu-img failed"));
+    }
+
+    #[derive(Deserialize)]
+    struct ImageInfo {
+        format: String,
+    }
+
+    let info: ImageInfo = serde_json::from_slice(&output.stdout)?;
+
+    Ok(info.format)
 }
 
 /// Run `crun`.

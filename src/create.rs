@@ -8,7 +8,9 @@ use std::path::Path;
 
 use xml::writer::XmlEvent;
 
-use crate::util::{crun, extract_runner_root_into, find_single_file_in_directory};
+use crate::util::{
+    crun, extract_runner_root_into, find_single_file_in_directory, get_image_format,
+};
 
 pub fn create(
     global_args: &liboci_cli::GlobalOpts,
@@ -31,6 +33,7 @@ pub fn create(
         .expect("config.json includes configuration for the container's root filesystem");
 
     let vm_image_path = find_single_file_in_directory(args.bundle.join(&root.path).join("disk"))?;
+    let vm_image_format = get_image_format(&vm_image_path)?;
 
     // prepare root filesystem for runner container
 
@@ -39,7 +42,7 @@ pub fn create(
 
     // create libvirt domain XML
 
-    write_domain_xml(runner_root_path.join("vm/domain.xml"))?;
+    write_domain_xml(runner_root_path.join("vm/domain.xml"), &vm_image_format)?;
 
     // adjust config for runner container
 
@@ -94,7 +97,7 @@ pub fn create(
     Ok(())
 }
 
-fn write_domain_xml(path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
+fn write_domain_xml(path: impl AsRef<Path>, image_format: &str) -> Result<(), Box<dyn Error>> {
     // section
     fn s(
         w: &mut xml::EventWriter<File>,
@@ -158,7 +161,7 @@ fn write_domain_xml(path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
 
             s(w, "disk", &[("type", "file"), ("device", "disk")], |w| {
                 se(w, "source", &[("file", "/vm/image")])?;
-                se(w, "driver", &[("name", "qemu"), ("type", "qcow2")])?;
+                se(w, "driver", &[("name", "qemu"), ("type", image_format)])?;
                 se(w, "target", &[("dev", "vda"), ("bus", "virtio")])?;
                 Ok(())
             })?;

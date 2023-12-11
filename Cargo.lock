@@ -123,6 +123,8 @@ dependencies = [
  "clap",
  "liboci-cli",
  "libocispec",
+ "serde",
+ "serde_json",
  "tar",
  "xml-rs",
 ]
