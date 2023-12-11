@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use std::error::Error;
-use std::fs;
-use std::io;
+use std::fs::{self, File};
+use std::io::{self, Write};
 use std::os::unix::fs::MetadataExt;
+use std::path::Path;
+
+use xml::writer::XmlEvent;
 
 use crate::util::{crun, extract_runner_root_into, find_single_file_in_directory};
 
@@ -33,6 +36,10 @@ pub fn create(
 
     let runner_root_path = args.bundle.join("crun-qemu-runner-root");
     extract_runner_root_into(&runner_root_path)?;
+
+    // create libvirt domain XML
+
+    write_domain_xml(runner_root_path.join("vm/domain.xml"))?;
 
     // adjust config for runner container
 
@@ -83,6 +90,92 @@ pub fn create(
     // create runner container
 
     crun_create(global_args, args)?;
+
+    Ok(())
+}
+
+fn write_domain_xml(path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
+    // section
+    fn s(
+        w: &mut xml::EventWriter<File>,
+        name: &str,
+        attrs: &[(&str, &str)],
+        f: impl FnOnce(&mut xml::EventWriter<File>) -> xml::writer::Result<()>,
+    ) -> xml::writer::Result<()> {
+        let mut start = XmlEvent::start_element(name);
+        for (key, value) in attrs {
+            start = start.attr(*key, value);
+        }
+
+        w.write(start)?;
+        f(w)?;
+        w.write(XmlEvent::end_element())?;
+
+        Ok(())
+    }
+
+    // section w/ text
+    fn st(
+        w: &mut xml::EventWriter<File>,
+        name: &str,
+        attrs: &[(&str, &str)],
+        value: &str,
+    ) -> xml::writer::Result<()> {
+        s(w, name, attrs, |w| w.write(XmlEvent::Characters(value)))
+    }
+
+    // empty section
+    fn se(
+        w: &mut xml::EventWriter<File>,
+        name: &str,
+        attrs: &[(&str, &str)],
+    ) -> xml::writer::Result<()> {
+        s(w, name, attrs, |_w| Ok(()))
+    }
+
+    let w = &mut xml::EmitterConfig::new()
+        .perform_indent(true)
+        .create_writer(File::create(path)?);
+
+    s(w, "domain", &[("type", "kvm")], |w| {
+        st(w, "name", &[], "domain")?;
+        st(w, "vcpu", &[], "2")?;
+        st(w, "memory", &[("unit", "GiB")], "2")?;
+
+        s(w, "os", &[], |w| {
+            st(w, "type", &[("arch", "x86_64"), ("machine", "q35")], "hvm")
+        })?;
+
+        s(w, "devices", &[], |w| {
+            st(w, "emulator", &[], "/usr/bin/qemu-system-x86_64")?;
+
+            s(w, "serial", &[("type", "pty")], |w| {
+                se(w, "target", &[("port", "0")])
+            })?;
+            s(w, "console", &[("type", "pty")], |w| {
+                se(w, "target", &[("type", "serial"), ("port", "0")])
+            })?;
+
+            s(w, "disk", &[("type", "file"), ("device", "disk")], |w| {
+                se(w, "source", &[("file", "/vm/image")])?;
+                se(w, "driver", &[("name", "qemu"), ("type", "qcow2")])?;
+                se(w, "target", &[("dev", "vda"), ("bus", "virtio")])?;
+                Ok(())
+            })?;
+
+            s(w, "interface", &[("type", "user")], |w| {
+                se(w, "backend", &[("type", "passt")])?;
+                se(w, "model", &[("type", "virtio")])?;
+                Ok(())
+            })?;
+
+            Ok(())
+        })?;
+
+        Ok(())
+    })?;
+
+    w.inner_mut().write_all(&[b'\n'])?;
 
     Ok(())
 }

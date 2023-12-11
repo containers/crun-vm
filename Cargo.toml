@@ -27,3 +27,7 @@ rev = "3d1e44e26d6fd50a9ba33f9cc6dd49992c429e9f"
 [dependencies.tar]
 version = "0.4.27"
 default-features = false
+
+[dependencies.xml-rs]
+version = "0.8.0"
+default-features = false
