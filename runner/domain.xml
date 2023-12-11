@@ -20,5 +20,9 @@
       <driver name='qemu' type='qcow2'/>  <!-- TODO: auto-detect format -->
       <target dev='vda' bus='virtio'/>
     </disk>
+    <interface type='user'>
+      <model type='virtio'/>
+      <backend type='passt'/>
+    </interface>
   </devices>
 </domain>
