@@ -5,7 +5,7 @@ use std::error::Error;
 use std::io;
 use std::process::{Command, ExitStatus, Stdio};
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() {
     println!("cargo:rerun-if-changed=runner/");
 
     // build runner image
@@ -16,10 +16,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         .arg("--quiet")
         .arg("runner/")
         .stdout(Stdio::piped())
-        .output()?;
-    check_status(output.status)?;
+        .output()
+        .unwrap();
+    check_status(output.status).unwrap();
 
-    let image_id = std::str::from_utf8(&output.stdout)?.trim();
+    let image_id = std::str::from_utf8(&output.stdout).unwrap().trim();
 
     // create container from runner image
 
@@ -28,10 +29,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         .arg("create")
         .arg(image_id)
         .stdout(Stdio::piped())
-        .output()?;
-    check_status(output.status)?;
+        .output()
+        .unwrap();
+    check_status(output.status).unwrap();
 
-    let container_id = std::str::from_utf8(&output.stdout)?.trim();
+    let container_id = std::str::from_utf8(&output.stdout).unwrap().trim();
 
     // extract container's root filesystem
 
@@ -46,11 +48,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         .arg("--force")
         .arg("--time=0")
         .arg(container_id)
-        .spawn()?
-        .wait()?;
-    check_status(status)?;
+        .spawn()
+        .unwrap()
+        .wait()
+        .unwrap();
+    check_status(status).unwrap();
 
-    result
+    result.unwrap()
 }
 
 fn extract_root(container_id: &str) -> Result<(), Box<dyn Error>> {
