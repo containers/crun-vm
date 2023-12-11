@@ -1,0 +1,24 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+
+<domain type='kvm'>
+  <name>domain</name>
+  <vcpu>2</vcpu>
+  <memory unit='GiB'>2</memory>
+  <os>
+    <type arch='x86_64' machine='q35'>hvm</type>
+  </os>
+  <devices>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+    <serial type='pty'>
+      <target port='0'/>
+    </serial>
+    <console type='pty'>
+      <target type='serial' port='0'/>
+    </console>
+    <disk type='file' device='disk'>
+      <source file='/vm/image'/>
+      <driver name='qemu' type='qcow2'/>  <!-- TODO: auto-detect format -->
+      <target dev='vda' bus='virtio'/>
+    </disk>
+  </devices>
+</domain>

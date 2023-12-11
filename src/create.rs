@@ -46,25 +46,7 @@ pub fn create(
 
     let process = spec.process.as_mut().expect("process config");
     process.command_line = None;
-    process.args = Some(
-        [
-            "qemu-system-x86_64",
-            "--machine",
-            "q35,accel=kvm",
-            "--cpu",
-            "host",
-            "--smp",
-            "cores=2",
-            "-m",
-            "2G",
-            "--drive",
-            "file=/vm-image,if=virtio,media=disk",
-            "--nographic",
-        ]
-        .iter()
-        .map(ToString::to_string)
-        .collect(),
-    );
+    process.args = Some(vec!["/vm/entrypoint.sh".to_string()]);
 
     let linux = spec.linux.as_mut().expect("linux config");
     let devices = linux.devices.get_or_insert_with(Vec::new);
@@ -82,7 +64,7 @@ pub fn create(
 
     let mounts = spec.mounts.get_or_insert_with(Vec::new);
     mounts.push(libocispec::runtime::Mount {
-        destination: "/vm-image".to_string(),
+        destination: "/vm/image".to_string(),
         gid_mappings: None,
         options: Some(vec!["bind".to_string(), "rprivate".to_string()]),
         source: Some(

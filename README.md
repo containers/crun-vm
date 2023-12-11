@@ -29,8 +29,7 @@ $ podman run \
     unused
 ```
 
-The VM console should take over your terminal. To abort the VM, press `ctrl-a,
-x`.
+The VM console should take over your terminal. To abort the VM, press `ctrl-]`.
 
 You can also detach from the VM without terminating it by pressing `ctrl-p,
 ctrl-q`. Afterwards, reattach by running:
