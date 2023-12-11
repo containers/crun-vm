@@ -57,6 +57,25 @@ Successfully tagged localhost/my-vm-container-image:v1
 0b6a775fdc377c0ec65fb67b54c524c707718f50193fa513a2e309aa08424635
 ```
 
+## Bind mounts
+
+Bind mounts are passed through to the VM as [virtiofs] file systems:
+
+```console
+$ podman run \
+    --runtime="$PWD"/target/debug/crun-qemu \
+    --security-opt label=disable \
+    -it --rm \
+    -v ./util:/my-tag \
+    quay.io/containerdisks/fedora:39 \
+    unused
+```
+
+What would normally be the destination path becomes the virtiofs tag (podman
+requires it to begin with a `/`). For the example above, you would then run
+`mount -t virtiofs /my-tag my-mount-point` in the VM to mount the virtiofs file
+system.
+
 ## How it works
 
 Internally, the `crun-qemu` runtime uses [crun] to run a different container
@@ -68,7 +87,14 @@ in the user-specified container.
 This command is handy for development:
 
 ```console
-$ cargo build && RUST_BACKTRACE=1 podman run --log-level=debug --security-opt label=disable --rm -it --runtime="$PWD"/target/debug/crun-qemu quay.io/containerdisks/fedora:39 unused
+$ cargo build && RUST_BACKTRACE=1 podman run \
+    --log-level=debug \
+    --runtime="$PWD"/target/debug/crun-qemu \
+    --security-opt label=disable \
+    -it --rm \
+    -v ./util:/my-tag \
+    quay.io/containerdisks/fedora:39 \
+    unused
 ```
 
 ## License
@@ -79,3 +105,4 @@ This project is released under the GPL 3.0 license. See [LICENSE](LICENSE).
 [libvirt]: https://libvirt.org/
 [OCI Runtime]: https://github.com/opencontainers/runtime-spec/blob/v1.1.0/spec.md
 [QEMU]: https://www.qemu.org/
+[virtiofs]: https://virtio-fs.gitlab.io/

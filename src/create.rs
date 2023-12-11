@@ -40,10 +40,6 @@ pub fn create(
     let runner_root_path = args.bundle.join("crun-qemu-runner-root");
     extract_runner_root_into(&runner_root_path)?;
 
-    // create libvirt domain XML
-
-    write_domain_xml(runner_root_path.join("vm/domain.xml"), &vm_image_format)?;
-
     // adjust config for runner container
 
     spec.root = Some(libocispec::runtime::Root {
@@ -73,6 +69,37 @@ pub fn create(
     });
 
     let mounts = spec.mounts.get_or_insert_with(Vec::new);
+
+    let ignore_mounts = [
+        "/dev",
+        "/etc/hostname",
+        "/etc/hosts",
+        "/etc/resolv.conf",
+        "/proc",
+        "/run/.containerenv",
+        "/run/secrets",
+        "/sys",
+        "/sys/fs/cgroup",
+    ];
+
+    let virtiofs_mounts: Vec<_> = mounts
+        .iter_mut()
+        .filter(|m| {
+            m.mount_type == Some("bind".to_string())
+                && !m.destination.starts_with("/dev/")
+                && !ignore_mounts.contains(&m.destination.as_str())
+        })
+        .enumerate()
+        .map(|(i, m)| {
+            let virtiofs_tag_in_guest = m.destination.clone();
+            m.destination = format!("/vm/mounts/{}", i);
+            VirtiofsMount {
+                socket: format!("/vm/mounts/virtiofsd/{}", i),
+                target: virtiofs_tag_in_guest,
+            }
+        })
+        .collect();
+
     mounts.push(libocispec::runtime::Mount {
         destination: "/vm/image".to_string(),
         gid_mappings: None,
@@ -90,6 +117,14 @@ pub fn create(
 
     spec.save(&config_path)?;
 
+    // create libvirt domain XML
+
+    write_domain_xml(
+        runner_root_path.join("vm/domain.xml"),
+        &vm_image_format,
+        &virtiofs_mounts,
+    )?;
+
     // create runner container
 
     crun_create(global_args, args)?;
@@ -97,7 +132,16 @@ pub fn create(
     Ok(())
 }
 
-fn write_domain_xml(path: impl AsRef<Path>, image_format: &str) -> Result<(), Box<dyn Error>> {
+struct VirtiofsMount {
+    socket: String,
+    target: String,
+}
+
+fn write_domain_xml(
+    path: impl AsRef<Path>,
+    image_format: &str,
+    virtiofs_mounts: &[VirtiofsMount],
+) -> Result<(), Box<dyn Error>> {
     // section
     fn s(
         w: &mut xml::EventWriter<File>,
@@ -149,6 +193,14 @@ fn write_domain_xml(path: impl AsRef<Path>, image_format: &str) -> Result<(), Bo
             st(w, "type", &[("arch", "x86_64"), ("machine", "q35")], "hvm")
         })?;
 
+        if !virtiofs_mounts.is_empty() {
+            s(w, "memoryBacking", &[], |w| {
+                se(w, "source", &[("type", "memfd")])?;
+                se(w, "access", &[("mode", "shared")])?;
+                Ok(())
+            })?;
+        }
+
         s(w, "devices", &[], |w| {
             st(w, "emulator", &[], "/usr/bin/qemu-system-x86_64")?;
 
@@ -171,6 +223,15 @@ fn write_domain_xml(path: impl AsRef<Path>, image_format: &str) -> Result<(), Bo
                 se(w, "model", &[("type", "virtio")])?;
                 Ok(())
             })?;
+
+            for mount in virtiofs_mounts {
+                s(w, "filesystem", &[("type", "mount")], |w| {
+                    se(w, "driver", &[("type", "virtiofs"), ("queue", "1024")])?;
+                    se(w, "source", &[("socket", &mount.socket)])?;
+                    se(w, "target", &[("dir", &mount.target)])?;
+                    Ok(())
+                })?;
+            }
 
             Ok(())
         })?;

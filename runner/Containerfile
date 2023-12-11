@@ -11,6 +11,7 @@ RUN dnf -y update \
         libvirt-daemon-config-network \
         libvirt-daemon-driver-qemu \
         qemu-system-x86-core \
+        virtiofsd \
     && dnf clean all
 
 # avoid "Unable to set XATTR trusted.libvirt.security.dac" error
@@ -18,6 +19,13 @@ RUN echo 'remember_owner = 0' >> /etc/libvirt/qemu.conf
 
 # disable libvirt cgroups management, since we're already in a container
 RUN echo 'cgroup_controllers = []' >> /etc/libvirt/qemu.conf
+
+# we run virtiofsd as non-root so it doesn't try to drop capabilities, which
+# doesn't seem to work in unprivileged containers
+RUN useradd --no-create-home virtiofsd
+
+# so qemu can access the virtiofsd sockets
+RUN usermod --append --groups virtiofsd qemu
 
 COPY entrypoint.sh /vm/
 
