@@ -54,6 +54,7 @@ fn podman_run_mounts() {
         container_name,
         "-dit",
         &format!("-v={}/examples/cloud-init/config:/cloud-init", REPO_PATH),
+        &format!("-v={}/examples/ignition/config.ign:/ignition", REPO_PATH),
         &format!("-v={}/util:/home/fedora/util", REPO_PATH),
         "quay.io/containerdisks/fedora:39",
         "unused",

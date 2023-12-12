@@ -103,6 +103,7 @@ pub fn create(
 
     let mut virtiofs_mounts: Vec<VirtiofsMount> = Vec::new();
     let cloudinit_config: Option<PathBuf>;
+    let has_ignition_config: bool;
     let pub_key: String;
 
     spec.set_mounts({
@@ -114,6 +115,7 @@ pub fn create(
             "/etc/hostname",
             "/etc/hosts",
             "/etc/resolv.conf",
+            "/ignition",
             "/proc",
             "/run/.containerenv",
             "/run/secrets",
@@ -165,6 +167,31 @@ pub fn create(
             source
         } else {
             None
+        };
+
+        let mut ignition_mounts: Vec<(usize, _)> = mounts
+            .iter()
+            .enumerate()
+            .filter(|(_, m)| {
+                m.typ() == &Some("bind".to_string())
+                    && m.destination().to_str() == Some("/ignition")
+            })
+            .map(|(i, m)| (i, m.source().clone()))
+            .collect();
+
+        has_ignition_config = if ignition_mounts.len() > 1 {
+            return Err(Box::new(io::Error::other("more than one Ignition mount")));
+        } else if let Some((i, source)) = ignition_mounts.pop() {
+            mounts.remove(i);
+            match source {
+                Some(source) => {
+                    fs::copy(source, runner_root_path.join("crun-qemu/ignition.ign"))?;
+                    true
+                }
+                None => false,
+            }
+        } else {
+            false
         };
 
         for path in ["/bin", "/dev/log", "/etc/pam.d", "/lib", "/lib64", "/usr"] {
@@ -228,6 +255,7 @@ pub fn create(
         &block_devices,
         &virtiofs_mounts,
         needs_cloud_init,
+        has_ignition_config,
         &spec,
     )?;
 
@@ -477,6 +505,7 @@ fn write_domain_xml(
     block_devices: &[BlockDevice],
     virtiofs_mounts: &[VirtiofsMount],
     needs_cloud_init: bool,
+    has_ignition_config: bool,
     spec: &oci_spec::runtime::Spec,
 ) -> Result<(), Box<dyn Error>> {
     // section
@@ -538,6 +567,22 @@ fn write_domain_xml(
         s(w, "os", &[], |w| {
             st(w, "type", &[("arch", "x86_64"), ("machine", "q35")], "hvm")
         })?;
+
+        if has_ignition_config {
+            // fw_cfg requires ACPI
+            s(w, "features", &[], |w| se(w, "acpi", &[]))?;
+
+            s(w, "sysinfo", &[("type", "fwcfg")], |w| {
+                se(
+                    w,
+                    "entry",
+                    &[
+                        ("name", "opt/com.coreos/config"),
+                        ("file", "/crun-qemu/ignition.ign"),
+                    ],
+                )
+            })?;
+        }
 
         if !virtiofs_mounts.is_empty() {
             s(w, "memoryBacking", &[], |w| {

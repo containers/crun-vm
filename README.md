@@ -110,6 +110,24 @@ $ podman run \
 You should now be able to login with the default `fedora` username and password
 `pass`.
 
+## Ignition
+
+Similarly, you can provide an [Ignition] configuration to the VM by configuring
+a bind mount with the special destination `/ignition`:
+
+```console
+$ podman run \
+    --runtime="$PWD"/target/debug/crun-qemu \
+    --security-opt label=disable \
+    -it --rm \
+    -v ./examples/ignition/config.ign:/ignition \
+    quay.io/crun-qemu/fedora-coreos:39 \
+    unused
+```
+
+You should now be able to login with the default `core` username and password
+`pass`.
+
 ## SSH'ing into the VM
 
 Assuming the VM supports cloud-init, you can SSH into it using podman-exec
@@ -162,6 +180,7 @@ This project is released under the GPL 2.0 (or later) license. See
 [crun]: https://github.com/containers/crun
 [KubeVirt `containerDisk`s]: https://kubevirt.io/user-guide/virtual_machines/disks_and_volumes/#containerdisk
 [libvirt]: https://libvirt.org/
+[Ignition]: https://coreos.github.io/ignition/
 [OCI Runtime]: https://github.com/opencontainers/runtime-spec/blob/v1.1.0/spec.md
 [QEMU]: https://www.qemu.org/
 [virtiofs]: https://virtio-fs.gitlab.io/

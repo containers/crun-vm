@@ -1,0 +1,25 @@
+{
+  "ignition": {
+    "version": "3.0.0"
+  },
+  "passwd": {
+    "users": [
+      {
+        "name": "core",
+        "passwordHash": "$y$j9T$USdd8CBvFNVU1xKwQUnsU/$aE.3arHcRxD0ZT3vkvsSpEsteUj6vC4ZdRHY8eOj1f4"
+      }
+    ]
+  },
+  "storage": {
+    "files": [
+      {
+        "path": "/etc/hostname",
+        "mode": 420,
+        "overwrite": true,
+        "contents": {
+          "source": "data:,my-vm"
+        }
+      }
+    ]
+  }
+}
