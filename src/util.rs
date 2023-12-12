@@ -8,16 +8,19 @@ use std::process::{Command, Stdio};
 use serde::Deserialize;
 
 pub fn find_single_file_in_directory(dir_path: impl AsRef<Path>) -> io::Result<PathBuf> {
+    let dir_path = dir_path.as_ref();
     let mut candidate = None;
 
-    for entry in dir_path.as_ref().read_dir()? {
-        let e = entry?;
+    if dir_path.is_dir() {
+        for entry in dir_path.read_dir()? {
+            let e = entry?;
 
-        if e.file_type()?.is_file() {
-            if candidate.is_some() {
-                return Err(io::Error::other("more than one file found"));
-            } else {
-                candidate = Some(e.path());
+            if e.file_type()?.is_file() {
+                if candidate.is_some() {
+                    return Err(io::Error::other("more than one file found"));
+                } else {
+                    candidate = Some(e.path());
+                }
             }
         }
     }
