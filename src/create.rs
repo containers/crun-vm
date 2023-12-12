@@ -100,6 +100,20 @@ pub fn create(
         })
         .collect();
 
+    let mut cloudinit_mounts: Vec<&mut _> = mounts
+        .iter_mut()
+        .filter(|m| m.mount_type == Some("bind".to_string()) && m.destination == "/cloud-init")
+        .collect();
+
+    let has_cloudinit_config = if cloudinit_mounts.len() > 1 {
+        return Err(Box::new(io::Error::other("more than one cloud-init mount")));
+    } else if let Some(mount) = cloudinit_mounts.pop() {
+        mount.destination = "/vm/cloud-init".to_string();
+        true
+    } else {
+        false
+    };
+
     mounts.push(libocispec::runtime::Mount {
         destination: "/vm/image".to_string(),
         gid_mappings: None,
@@ -123,6 +137,7 @@ pub fn create(
         runner_root_path.join("vm/domain.xml"),
         &vm_image_format,
         &virtiofs_mounts,
+        has_cloudinit_config,
     )?;
 
     // create runner container
@@ -141,6 +156,7 @@ fn write_domain_xml(
     path: impl AsRef<Path>,
     image_format: &str,
     virtiofs_mounts: &[VirtiofsMount],
+    has_cloudinit_config: bool,
 ) -> Result<(), Box<dyn Error>> {
     // section
     fn s(
@@ -217,6 +233,15 @@ fn write_domain_xml(
                 se(w, "target", &[("dev", "vda"), ("bus", "virtio")])?;
                 Ok(())
             })?;
+
+            if has_cloudinit_config {
+                s(w, "disk", &[("type", "file"), ("device", "disk")], |w| {
+                    se(w, "source", &[("file", "/vm/cloud-init.iso")])?;
+                    se(w, "driver", &[("name", "qemu"), ("type", "raw")])?;
+                    se(w, "target", &[("dev", "vdb"), ("bus", "virtio")])?;
+                    Ok(())
+                })?;
+            }
 
             s(w, "interface", &[("type", "user")], |w| {
                 se(w, "backend", &[("type", "passt")])?;

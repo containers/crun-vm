@@ -5,6 +5,7 @@ FROM fedora:39
 RUN dnf -y update \
     && dnf -y install \
         file \
+        genisoimage \
         htop \
         iputils \
         libvirt-client \

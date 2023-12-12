@@ -76,6 +76,27 @@ requires it to begin with a `/`). For the example above, you would then run
 `mount -t virtiofs /my-tag my-mount-point` in the VM to mount the virtiofs file
 system.
 
+## cloud-init
+
+You can provide a [cloud-init] NoCloud configuration to the VM by configuring a
+bind mount with the special destination `/cloud-init`:
+
+```console
+$ ls examples/cloud-init/config/
+meta-data  user-data  vendor-data
+
+$ podman run \
+    --runtime="$PWD"/target/debug/crun-qemu \
+    --security-opt label=disable \
+    -it --rm \
+    -v ./examples/cloud-init/config:/cloud-init \
+    quay.io/containerdisks/fedora:39 \
+    unused
+```
+
+You should now be able to login with the default `fedora` username and password
+`pass`.
+
 ## How it works
 
 Internally, the `crun-qemu` runtime uses [crun] to run a different container
@@ -92,6 +113,7 @@ $ cargo build && RUST_BACKTRACE=1 podman run \
     --runtime="$PWD"/target/debug/crun-qemu \
     --security-opt label=disable \
     -it --rm \
+    -v ./examples/cloud-init/config:/cloud-init \
     -v ./util:/my-tag \
     quay.io/containerdisks/fedora:39 \
     unused
@@ -101,6 +123,7 @@ $ cargo build && RUST_BACKTRACE=1 podman run \
 
 This project is released under the GPL 3.0 license. See [LICENSE](LICENSE).
 
+[cloud-init]: https://cloud-init.io/
 [crun]: https://github.com/containers/crun
 [libvirt]: https://libvirt.org/
 [OCI Runtime]: https://github.com/opencontainers/runtime-spec/blob/v1.1.0/spec.md
