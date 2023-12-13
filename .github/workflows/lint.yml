@@ -1,0 +1,26 @@
+name: Lint
+
+on:
+  - pull_request
+  - push
+
+jobs:
+
+  lint:
+    name: Rust ${{ matrix.rust }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust: [ stable, "1.74" ]
+    steps:
+
+      - uses: actions/checkout@v4
+
+      - name: Set Rust version
+        run: rustup default ${{ matrix.rust }}
+
+      - name: Install cargo-fmt and cargo-clippy
+        run: rustup component add rustfmt clippy
+
+      - name: Lint
+        run: ./lint.sh
