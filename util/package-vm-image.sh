@@ -12,7 +12,9 @@ fi
 vm_image_file=$1
 container_image_tag=$2
 
+image_path_in_container=/disk/$( basename "${vm_image_file}" )
+
 podman image build --file=- --tag="${container_image_tag}" . <<EOF
 FROM scratch
-COPY ${vm_image_file@Q} /disk/image
+COPY ${vm_image_file@Q} ${image_path_in_container@Q}
 EOF
