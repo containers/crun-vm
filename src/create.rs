@@ -202,7 +202,10 @@ fn write_domain_xml(
 
     s(w, "domain", &[("type", "kvm")], |w| {
         st(w, "name", &[], "domain")?;
+
+        se(w, "cpu", &[("mode", "host-model")])?;
         st(w, "vcpu", &[], "2")?;
+
         st(w, "memory", &[("unit", "GiB")], "2")?;
 
         s(w, "os", &[], |w| {
