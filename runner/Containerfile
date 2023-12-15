@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-FROM fedora:39
+FROM quay.io/fedora/fedora:39
 
 RUN dnf -y update \
     && dnf -y install \
