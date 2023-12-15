@@ -71,6 +71,7 @@ pub fn create(
     let mounts = spec.mounts.get_or_insert_with(Vec::new);
 
     let ignore_mounts = [
+        "/cloud-init",
         "/dev",
         "/etc/hostname",
         "/etc/hosts",
