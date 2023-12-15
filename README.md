@@ -6,8 +6,8 @@ make running VMs (in simple configurations) as easy as running containers, while
 leveraging the existing container image distribution infrastructure.
 
 The runtime expects container images to contain a VM image file with any name
-under a `/disk` directory. No other files may exist under `/disk`. (This is the
-convention followed by KubeVirt `containerDisk`s, so you can use those
+under `/` or under `/disk/`. No other files may exist in those directories.
+(This convention is followed by KubeVirt `containerDisk`s, so you can use those
 containers with this runtime.)
 
 ## Trying it out
@@ -50,7 +50,7 @@ Package a given VM image file into a container image and tag it.
 
 $ ./package-vm-image.sh my-vm-image.qcow2 my-vm-container-image:v1
 STEP 1/2: FROM scratch
-STEP 2/2: COPY 'my-vm-image.qcow2' /disk/image
+STEP 2/2: COPY 'my-vm-image.qcow2' /image
 COMMIT my-vm-container-image:v1
 --> 0b6a775fdc37
 Successfully tagged localhost/my-vm-container-image:v1

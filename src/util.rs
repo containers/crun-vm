@@ -7,19 +7,26 @@ use std::process::{Command, Stdio};
 
 use serde::Deserialize;
 
-pub fn find_single_file_in_directory(dir_path: impl AsRef<Path>) -> io::Result<PathBuf> {
-    let dir_path = dir_path.as_ref();
+pub fn find_single_file_in_directories<I, P>(dir_paths: I) -> io::Result<PathBuf>
+where
+    I: IntoIterator<Item = P>,
+    P: AsRef<Path>,
+{
     let mut candidate = None;
 
-    if dir_path.is_dir() {
-        for entry in dir_path.read_dir()? {
-            let e = entry?;
+    for dir_path in dir_paths {
+        let dir_path = dir_path.as_ref();
 
-            if e.file_type()?.is_file() {
-                if candidate.is_some() {
-                    return Err(io::Error::other("more than one file found"));
-                } else {
-                    candidate = Some(e.path());
+        if dir_path.is_dir() {
+            for entry in dir_path.read_dir()? {
+                let e = entry?;
+
+                if e.file_type()?.is_file() {
+                    if candidate.is_some() {
+                        return Err(io::Error::other("more than one file found"));
+                    } else {
+                        candidate = Some(e.path());
+                    }
                 }
             }
         }

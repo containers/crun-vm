@@ -19,7 +19,7 @@ container_id=$( podman container create --quiet "${container_image_tag}" unused 
 trap 'podman container rm "${container_id}" >/dev/null; rm -fr "${temp_dir}"' EXIT
 
 podman container export -o "${temp_dir}/root.tar" "${container_id}"
-mapfile -t candidates < <( tar -tf "${temp_dir}/root.tar" | grep -P 'disk/[^/]+' )
+mapfile -t candidates < <( tar -tf "${temp_dir}/root.tar" | grep -xP '[^/]+|disk/[^/]+' )
 
 if (( ${#candidates[@]} == 0 )); then
     >&2 echo "Error: found no VM image file in the container image"

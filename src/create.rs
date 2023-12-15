@@ -9,7 +9,7 @@ use std::path::Path;
 use xml::writer::XmlEvent;
 
 use crate::util::{
-    crun, extract_runner_root_into, find_single_file_in_directory, get_image_format,
+    crun, extract_runner_root_into, find_single_file_in_directories, get_image_format,
 };
 
 pub fn create(
@@ -32,7 +32,10 @@ pub fn create(
         .as_ref()
         .expect("config.json includes configuration for the container's root filesystem");
 
-    let vm_image_path = find_single_file_in_directory(args.bundle.join(&root.path).join("disk"))?;
+    let vm_image_path = find_single_file_in_directories([
+        args.bundle.join(&root.path),
+        args.bundle.join(&root.path).join("disk"),
+    ])?;
     let vm_image_format = get_image_format(&vm_image_path)?;
 
     // prepare root filesystem for runner container
