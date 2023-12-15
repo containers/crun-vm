@@ -3,7 +3,7 @@ name = "crun-qemu"
 version = "0.0.0"
 edition = "2021"
 rust-version = "1.74"
-license = "GPL-3.0-only"
+license = "GPL-2.0-or-later"
 
 [dependencies.clap]
 version = "4.0"

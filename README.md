@@ -121,7 +121,8 @@ $ cargo build && RUST_BACKTRACE=1 podman run \
 
 ## License
 
-This project is released under the GPL 3.0 license. See [LICENSE](LICENSE).
+This project is released under the GPL 2.0 (or later) license. See
+[LICENSE](LICENSE).
 
 [cloud-init]: https://cloud-init.io/
 [crun]: https://github.com/containers/crun
