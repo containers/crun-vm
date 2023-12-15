@@ -76,6 +76,32 @@ pub fn get_image_format(image_path: impl AsRef<Path>) -> io::Result<String> {
     Ok(info.format)
 }
 
+pub fn create_overlay_image(
+    overlay_image_path: impl AsRef<Path>,
+    backing_image_path: impl AsRef<Path>,
+) -> io::Result<()> {
+    let backing_image_format = get_image_format(backing_image_path.as_ref())?;
+
+    let status = Command::new("qemu-img")
+        .arg("create")
+        .arg("-q")
+        .arg("-f")
+        .arg("qcow2")
+        .arg("-F")
+        .arg(backing_image_format)
+        .arg("-b")
+        .arg(backing_image_path.as_ref())
+        .arg(overlay_image_path.as_ref())
+        .spawn()?
+        .wait()?;
+
+    if status.success() {
+        Ok(())
+    } else {
+        Err(io::Error::other("qemu-img failed"))
+    }
+}
+
 /// Run `crun`.
 ///
 /// `crun` will inherit this process' standard streams.

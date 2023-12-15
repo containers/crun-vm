@@ -9,7 +9,8 @@ use std::path::Path;
 use xml::writer::XmlEvent;
 
 use crate::util::{
-    crun, extract_runner_root_into, find_single_file_in_directories, get_image_format,
+    create_overlay_image, crun, extract_runner_root_into, find_single_file_in_directories,
+    get_image_format,
 };
 
 pub fn create(
@@ -42,6 +43,11 @@ pub fn create(
 
     let runner_root_path = args.bundle.join("crun-qemu-runner-root");
     extract_runner_root_into(&runner_root_path)?;
+
+    // create overlay image
+
+    let overlay_image_path = runner_root_path.join("vm/image-overlay.qcow2");
+    create_overlay_image(&overlay_image_path, &vm_image_path)?;
 
     // adjust config for runner container
 
@@ -235,9 +241,15 @@ fn write_domain_xml(
             })?;
 
             s(w, "disk", &[("type", "file"), ("device", "disk")], |w| {
-                se(w, "source", &[("file", "/vm/image")])?;
-                se(w, "driver", &[("name", "qemu"), ("type", image_format)])?;
                 se(w, "target", &[("dev", "vda"), ("bus", "virtio")])?;
+                se(w, "driver", &[("name", "qemu"), ("type", "qcow2")])?;
+                se(w, "source", &[("file", "/vm/image-overlay.qcow2")])?;
+                s(w, "backingStore", &[("type", "file")], |w| {
+                    se(w, "format", &[("type", image_format)])?;
+                    se(w, "source", &[("file", "/vm/image")])?;
+                    se(w, "backingStore", &[])?;
+                    Ok(())
+                })?;
                 Ok(())
             })?;
 

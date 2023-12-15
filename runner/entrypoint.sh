@@ -6,8 +6,6 @@ set -o errexit -o pipefail -o nounset
 virtlogd --daemon
 virtqemud --daemon
 
-chmod u+w /vm/image
-
 # provide NoCloud cloud-init config to the VM
 
 if [[ -e /vm/cloud-init ]]; then
