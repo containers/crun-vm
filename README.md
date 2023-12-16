@@ -44,11 +44,11 @@ Use the `package-vm-image.sh` script to package a VM image file into a container
 image:
 
 ```console
-$ ./package-vm-image.sh
-Usage: ./package-vm-image.sh <vm_image_file> <container_image_tag>
+$ util/package-vm-image.sh
+Usage: util/package-vm-image.sh <vm_image_file> <container_image_tag>
 Package a given VM image file into a container image and tag it.
 
-$ ./package-vm-image.sh my-vm-image.qcow2 my-vm-container-image:v1
+$ util/package-vm-image.sh my-vm-image.qcow2 my-vm-container-image:v1
 STEP 1/2: FROM scratch
 STEP 2/2: COPY 'my-vm-image.qcow2' /image
 COMMIT my-vm-container-image:v1
