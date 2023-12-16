@@ -47,7 +47,7 @@ pub fn create(
     // create overlay image
 
     let overlay_image_path = runner_root_path.join("vm/image-overlay.qcow2");
-    create_overlay_image(&overlay_image_path, &vm_image_path)?;
+    create_overlay_image(overlay_image_path, &vm_image_path)?;
 
     // adjust config for runner container
 
