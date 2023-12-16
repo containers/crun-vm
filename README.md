@@ -103,22 +103,6 @@ Internally, the `crun-qemu` runtime uses [crun] to run a different container
 that in turn uses [libvirt] to run a [QEMU] guest based on the VM image included
 in the user-specified container.
 
-## Development
-
-This command is handy for development:
-
-```console
-$ cargo build && RUST_BACKTRACE=1 podman run \
-    --log-level=debug \
-    --runtime="$PWD"/target/debug/crun-qemu \
-    --security-opt label=disable \
-    -it --rm \
-    -v ./examples/cloud-init/config:/cloud-init \
-    -v ./util:/my-tag \
-    quay.io/containerdisks/fedora:39 \
-    unused
-```
-
 ## License
 
 This project is released under the GPL 2.0 (or later) license. See
