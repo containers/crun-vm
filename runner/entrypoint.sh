@@ -6,17 +6,6 @@ set -o errexit -o pipefail -o nounset
 virtlogd --daemon
 virtqemud --daemon
 
-# provide NoCloud cloud-init config to the VM
-
-if [[ -e /vm/cloud-init ]]; then
-    find /vm/cloud-init -mindepth 1 -print0 | xargs -0 genisoimage \
-        -output /vm/cloud-init.iso \
-        -volid cidata \
-        -joliet \
-        -rock \
-        -quiet
-fi
-
 # pass bind mounts through to the VM using virtiofs
 
 mkdir -p /vm/mounts/virtiofsd

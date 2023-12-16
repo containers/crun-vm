@@ -66,15 +66,17 @@ $ podman run \
     --runtime="$PWD"/target/debug/crun-qemu \
     --security-opt label=disable \
     -it --rm \
-    -v ./util:/my-tag \
+    -v ./util:/home/fedora/util \
     quay.io/containerdisks/fedora:39 \
     unused
 ```
 
-What would normally be the destination path becomes the virtiofs tag (podman
-requires it to begin with a `/`). For the example above, you would then run
-`mount -t virtiofs /my-tag my-mount-point` in the VM to mount the virtiofs file
-system.
+If the VM image support cloud-init, the volume will automatically be mounted
+inside the guest at the given path. Otherwise, you can mount it with:
+
+```console
+mount -t virtiofs /home/fedora/util /home/fedora/util
+```
 
 ## cloud-init
 

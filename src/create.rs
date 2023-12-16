@@ -10,7 +10,7 @@ use xml::writer::XmlEvent;
 
 use crate::util::{
     create_overlay_image, crun, extract_runner_root_into, find_single_file_in_directories,
-    get_image_format,
+    generate_cloud_init_iso, get_image_format,
 };
 
 pub fn create(
@@ -110,18 +110,20 @@ pub fn create(
         })
         .collect();
 
-    let mut cloudinit_mounts: Vec<&mut _> = mounts
-        .iter_mut()
-        .filter(|m| m.mount_type == Some("bind".to_string()) && m.destination == "/cloud-init")
+    let mut cloudinit_mounts: Vec<(usize, _)> = mounts
+        .iter()
+        .enumerate()
+        .filter(|(_, m)| m.mount_type == Some("bind".to_string()) && m.destination == "/cloud-init")
+        .map(|(i, m)| (i, m.source.clone()))
         .collect();
 
-    let has_cloudinit_config = if cloudinit_mounts.len() > 1 {
+    let cloudinit_config = if cloudinit_mounts.len() > 1 {
         return Err(Box::new(io::Error::other("more than one cloud-init mount")));
-    } else if let Some(mount) = cloudinit_mounts.pop() {
-        mount.destination = "/vm/cloud-init".to_string();
-        true
+    } else if let Some((i, source)) = cloudinit_mounts.pop() {
+        mounts.remove(i);
+        source
     } else {
-        false
+        None
     };
 
     mounts.push(libocispec::runtime::Mount {
@@ -141,13 +143,21 @@ pub fn create(
 
     spec.save(&config_path)?;
 
+    // create cloud-init config
+
+    let needs_cloud_init = generate_cloud_init_iso(
+        cloudinit_config,
+        &runner_root_path,
+        virtiofs_mounts.iter().map(|m| &m.target),
+    )?;
+
     // create libvirt domain XML
 
     write_domain_xml(
         runner_root_path.join("vm/domain.xml"),
         &vm_image_format,
         &virtiofs_mounts,
-        has_cloudinit_config,
+        needs_cloud_init,
     )?;
 
     // create runner container
@@ -166,7 +176,7 @@ fn write_domain_xml(
     path: impl AsRef<Path>,
     image_format: &str,
     virtiofs_mounts: &[VirtiofsMount],
-    has_cloudinit_config: bool,
+    needs_cloud_init: bool,
 ) -> Result<(), Box<dyn Error>> {
     // section
     fn s(
@@ -253,9 +263,9 @@ fn write_domain_xml(
                 Ok(())
             })?;
 
-            if has_cloudinit_config {
+            if needs_cloud_init {
                 s(w, "disk", &[("type", "file"), ("device", "disk")], |w| {
-                    se(w, "source", &[("file", "/vm/cloud-init.iso")])?;
+                    se(w, "source", &[("file", "/vm/cloud-init/cloud-init.iso")])?;
                     se(w, "driver", &[("name", "qemu"), ("type", "raw")])?;
                     se(w, "target", &[("dev", "vdb"), ("bus", "virtio")])?;
                     Ok(())
