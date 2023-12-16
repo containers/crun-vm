@@ -15,6 +15,7 @@ containers with this runtime.)
 First build the runtime:
 
 ```console
+$ dnf install bash coreutils crun genisoimage libvirt-client libvirt-daemon-driver-qemu libvirt-daemon-log qemu-img shadow-utils util-linux virtiofsd
 $ cargo build
 ```
 

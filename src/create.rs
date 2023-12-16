@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use std::error::Error;
-use std::fs::{self, File};
+use std::fs::{self, File, Permissions};
 use std::io::{self, Write};
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 
 use xml::writer::XmlEvent;
 
 use crate::util::{
-    create_overlay_image, crun, extract_runner_root_into, find_single_file_in_directories,
-    generate_cloud_init_iso, get_image_format,
+    create_overlay_image, crun, find_single_file_in_directories, generate_cloud_init_iso,
+    get_image_format,
 };
 
 pub fn create(
@@ -42,11 +42,16 @@ pub fn create(
     // prepare root filesystem for runner container
 
     let runner_root_path = args.bundle.join("crun-qemu-runner-root");
-    extract_runner_root_into(&runner_root_path)?;
+    fs::create_dir_all(runner_root_path.join("crun-qemu"))?;
+
+    const ENTRYPOINT_BYTES: &[u8] = include_bytes!("runner.sh");
+    let entrypoint_path = runner_root_path.join("crun-qemu/runner.sh");
+    fs::write(&entrypoint_path, ENTRYPOINT_BYTES)?;
+    fs::set_permissions(&entrypoint_path, Permissions::from_mode(0o555))?;
 
     // create overlay image
 
-    let overlay_image_path = runner_root_path.join("vm/image-overlay.qcow2");
+    let overlay_image_path = runner_root_path.join("crun-qemu/image-overlay.qcow2");
     create_overlay_image(overlay_image_path, &vm_image_path)?;
 
     // adjust config for runner container
@@ -60,8 +65,9 @@ pub fn create(
     });
 
     let process = spec.process.as_mut().expect("process config");
+    process.cwd = "/".to_string();
     process.command_line = None;
-    process.args = Some(vec!["/vm/entrypoint.sh".to_string()]);
+    process.args = Some(vec!["/crun-qemu/runner.sh".to_string()]);
 
     let linux = spec.linux.as_mut().expect("linux config");
     let devices = linux.devices.get_or_insert_with(Vec::new);
@@ -102,9 +108,9 @@ pub fn create(
         .enumerate()
         .map(|(i, m)| {
             let virtiofs_tag_in_guest = m.destination.clone();
-            m.destination = format!("/vm/mounts/{}", i);
+            m.destination = format!("/crun-qemu/mounts/{}", i);
             VirtiofsMount {
-                socket: format!("/vm/mounts/virtiofsd/{}", i),
+                socket: format!("/crun-qemu/mounts/virtiofsd/{}", i),
                 target: virtiofs_tag_in_guest,
             }
         })
@@ -126,8 +132,27 @@ pub fn create(
         None
     };
 
+    for path in ["/bin", "/dev/log", "/etc/pam.d", "/lib", "/lib64", "/usr"] {
+        mounts.push(libocispec::runtime::Mount {
+            destination: path.to_string(),
+            gid_mappings: None,
+            options: Some(vec![
+                "bind".to_string(),
+                "rprivate".to_string(),
+                "readonly".to_string(),
+            ]),
+            source: Some(path.to_string()),
+            mount_type: Some("bind".to_string()),
+            uid_mappings: None,
+        });
+    }
+
+    fs::create_dir_all(runner_root_path.join("etc"))?;
+    fs::copy("/etc/passwd", runner_root_path.join("etc/passwd"))?;
+    fs::copy("/etc/group", runner_root_path.join("etc/group"))?;
+
     mounts.push(libocispec::runtime::Mount {
-        destination: "/vm/image".to_string(),
+        destination: "/crun-qemu/image".to_string(),
         gid_mappings: None,
         options: Some(vec!["bind".to_string(), "rprivate".to_string()]),
         source: Some(
@@ -154,7 +179,7 @@ pub fn create(
     // create libvirt domain XML
 
     write_domain_xml(
-        runner_root_path.join("vm/domain.xml"),
+        runner_root_path.join("crun-qemu/domain.xml"),
         &vm_image_format,
         &virtiofs_mounts,
         needs_cloud_init,
@@ -253,10 +278,10 @@ fn write_domain_xml(
             s(w, "disk", &[("type", "file"), ("device", "disk")], |w| {
                 se(w, "target", &[("dev", "vda"), ("bus", "virtio")])?;
                 se(w, "driver", &[("name", "qemu"), ("type", "qcow2")])?;
-                se(w, "source", &[("file", "/vm/image-overlay.qcow2")])?;
+                se(w, "source", &[("file", "/crun-qemu/image-overlay.qcow2")])?;
                 s(w, "backingStore", &[("type", "file")], |w| {
                     se(w, "format", &[("type", image_format)])?;
-                    se(w, "source", &[("file", "/vm/image")])?;
+                    se(w, "source", &[("file", "/crun-qemu/image")])?;
                     se(w, "backingStore", &[])?;
                     Ok(())
                 })?;
@@ -265,7 +290,11 @@ fn write_domain_xml(
 
             if needs_cloud_init {
                 s(w, "disk", &[("type", "file"), ("device", "disk")], |w| {
-                    se(w, "source", &[("file", "/vm/cloud-init/cloud-init.iso")])?;
+                    se(
+                        w,
+                        "source",
+                        &[("file", "/crun-qemu/cloud-init/cloud-init.iso")],
+                    )?;
                     se(w, "driver", &[("name", "qemu"), ("type", "raw")])?;
                     se(w, "target", &[("dev", "vdb"), ("bus", "virtio")])?;
                     Ok(())

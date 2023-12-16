@@ -3,7 +3,7 @@
 use std::error::Error;
 use std::ffi::OsStr;
 use std::fs::{self, File};
-use std::io::{self, BufReader, Write};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -39,21 +39,6 @@ where
     } else {
         Err(io::Error::other("no files found"))
     }
-}
-
-/// Unpacks the crun-qemu runner container image's root filesystem into the given directory.
-///
-/// TODO: Embedding this root filesystem into the crun-qemu executable and unpacking it every time
-/// the container engine asks us to create a container is handy for development but inefficient and
-/// ugly. It should instead be installed alongside the crun-qemu runtime as a directory somewhere on
-/// the system.
-pub fn extract_runner_root_into(dir_path: impl AsRef<Path>) -> io::Result<()> {
-    let tar_bytes: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/runner.tar"));
-    let tar_reader = BufReader::new(tar_bytes);
-
-    tar::Archive::new(tar_reader).unpack(dir_path)?;
-
-    Ok(())
 }
 
 pub fn get_image_format(image_path: impl AsRef<Path>) -> io::Result<String> {
@@ -137,7 +122,7 @@ pub fn generate_cloud_init_iso(
         return Ok(false);
     }
 
-    let config_path = runner_root.as_ref().join("vm/cloud-init");
+    let config_path = runner_root.as_ref().join("crun-qemu/cloud-init");
     fs::create_dir_all(&config_path)?;
 
     // create copy of config
@@ -215,7 +200,11 @@ pub fn generate_cloud_init_iso(
 
     let status = Command::new("genisoimage")
         .arg("-output")
-        .arg(runner_root.as_ref().join("vm/cloud-init/cloud-init.iso"))
+        .arg(
+            runner_root
+                .as_ref()
+                .join("crun-qemu/cloud-init/cloud-init.iso"),
+        )
         .arg("-volid")
         .arg("cidata")
         .arg("-joliet")

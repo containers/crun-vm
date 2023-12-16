@@ -33,10 +33,6 @@ version = "1.0"
 [dependencies.serde_yaml]
 version = "0.9.0"
 
-[dependencies.tar]
-version = "0.4.27"
-default-features = false
-
 [dependencies.xml-rs]
 version = "0.8.0"
 default-features = false
