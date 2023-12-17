@@ -62,7 +62,7 @@ pub fn create(
 
     spec.set_process({
         let mut process = spec.process().clone().expect("process config");
-        process.set_cwd("/".into());
+        process.set_cwd(".".into());
         process.set_command_line(None);
         process.set_args(Some(vec!["/crun-qemu/runner.sh".to_string()]));
         Some(process)
