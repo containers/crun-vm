@@ -110,6 +110,25 @@ $ podman run \
 You should now be able to login with the default `fedora` username and password
 `pass`.
 
+## SSH'ing into the VM
+
+Assuming the VM supports cloud-init, you can SSH into it using podman-exec
+as whatever user cloud-init considers to be the default for your VM image:
+
+```console
+$ podman exec --latest fedora
+```
+
+The last argument above, which would typically be the command name, determines
+instead the name of the user to ssh into. A command can optionally be specified
+with further arguments. If no command is specified, a login shell is initiated.
+Note that in the latter case, you probably want to pass flags `-it` to
+podman-exec.
+
+If you actually just want to exec into the container in which the VM is running
+(probably to debug some problem with `crun-qemu` itself), pass in `-` as the
+username.
+
 ## How it works
 
 Internally, the `crun-qemu` runtime uses [crun] to run a different container

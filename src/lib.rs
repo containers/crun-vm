@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 mod create;
+mod exec;
 mod util;
 
 use std::error::Error;
@@ -44,9 +45,16 @@ where
     let parsed_args =
         Args::parse_from(iter::once(&OsStr::new("crun-qemu").to_os_string()).chain(&args));
 
-    if let Command::Standard(cmd) = parsed_args.command {
-        if let liboci_cli::StandardCmd::Create(create_args) = *cmd {
-            return create::create(&parsed_args.global, &create_args);
+    match parsed_args.command {
+        Command::Standard(cmd) => {
+            if let liboci_cli::StandardCmd::Create(create_args) = *cmd {
+                return create::create(&parsed_args.global, &create_args);
+            }
+        }
+        Command::Common(cmd) => {
+            if let liboci_cli::CommonCmd::Exec(mut exec_args) = *cmd {
+                return exec::exec(&parsed_args.global, &mut exec_args);
+            }
         }
     }
 

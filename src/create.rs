@@ -5,6 +5,7 @@ use std::fs::{self, File, Permissions};
 use std::io::{self, Write};
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use sysinfo::SystemExt;
 use xml::writer::XmlEvent;
@@ -93,6 +94,7 @@ pub fn create(
 
     let virtiofs_mounts: Vec<VirtiofsMount>;
     let cloudinit_config: Option<PathBuf>;
+    let pub_key: String;
 
     spec.set_mounts({
         let mut mounts = spec.mounts().clone().unwrap_or_default();
@@ -160,6 +162,20 @@ pub fn create(
         fs::copy("/etc/passwd", runner_root_path.join("etc/passwd"))?;
         fs::copy("/etc/group", runner_root_path.join("etc/group"))?;
 
+        fs::create_dir_all(runner_root_path.join("root/.ssh"))?;
+        let status = Command::new("ssh-keygen")
+            .arg("-q")
+            .arg("-f")
+            .arg(runner_root_path.join("root/.ssh/id_rsa"))
+            .arg("-N")
+            .arg("")
+            .spawn()?
+            .wait()?;
+        if !status.success() {
+            return Err(Box::new(io::Error::other("ssh-keygen failed")));
+        }
+        pub_key = fs::read_to_string(runner_root_path.join("root/.ssh/id_rsa.pub"))?;
+
         mounts.push(
             oci_spec::runtime::MountBuilder::default()
                 .typ("bind")
@@ -180,6 +196,7 @@ pub fn create(
         cloudinit_config,
         &runner_root_path,
         virtiofs_mounts.iter().map(|m| &m.target),
+        pub_key.trim(),
     )?;
 
     // create libvirt domain XML
@@ -373,6 +390,9 @@ fn write_domain_xml(
             s(w, "interface", &[("type", "user")], |w| {
                 se(w, "backend", &[("type", "passt")])?;
                 se(w, "model", &[("type", "virtio")])?;
+                s(w, "portForward", &[("proto", "tcp")], |w| {
+                    se(w, "range", &[("start", "22"), ("to", "22")])
+                })?;
                 Ok(())
             })?;
 

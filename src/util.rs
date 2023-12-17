@@ -116,6 +116,7 @@ pub fn generate_cloud_init_iso(
     source_config_path: Option<impl AsRef<Path>>,
     runner_root: impl AsRef<Path>,
     virtiofs_mounts: impl IntoIterator<Item = impl AsRef<str>>,
+    container_pub_key: &str,
 ) -> Result<bool, Box<dyn Error>> {
     let virtiofs_mounts: Vec<_> = virtiofs_mounts.into_iter().collect();
 
@@ -173,17 +174,19 @@ pub fn generate_cloud_init_iso(
         user_data = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
     }
 
-    let mounts = match &mut user_data {
-        serde_yaml::Value::Mapping(m) => {
-            if !m.contains_key("mounts") {
-                m.insert("mounts".into(), serde_yaml::Value::Sequence(vec![]));
-            }
+    let user_data_mapping = match &mut user_data {
+        serde_yaml::Value::Mapping(m) => m,
+        _ => return Err(io::Error::other("cloud-init: invalid user-data file").into()),
+    };
 
-            match m.get_mut("mounts").unwrap() {
-                serde_yaml::Value::Sequence(mounts) => mounts,
-                _ => return Err(io::Error::other("cloud-init: invalid user-data file").into()),
-            }
-        }
+    // adjust mounts
+
+    if !user_data_mapping.contains_key("mounts") {
+        user_data_mapping.insert("mounts".into(), serde_yaml::Value::Sequence(vec![]));
+    }
+
+    let mounts = match user_data_mapping.get_mut("mounts").unwrap() {
+        serde_yaml::Value::Sequence(mounts) => mounts,
         _ => return Err(io::Error::other("cloud-init: invalid user-data file").into()),
     };
 
@@ -192,13 +195,29 @@ pub fn generate_cloud_init_iso(
         mounts.push(vec![mount, mount, "virtiofs", "defaults", "0", "0"].into());
     }
 
+    // adjust authorized keys
+
+    if !user_data_mapping.contains_key("ssh_authorized_keys") {
+        user_data_mapping.insert(
+            "ssh_authorized_keys".into(),
+            serde_yaml::Value::Sequence(vec![]),
+        );
+    }
+
+    let ssh_authorized_keys = match user_data_mapping.get_mut("ssh_authorized_keys").unwrap() {
+        serde_yaml::Value::Sequence(keys) => keys,
+        _ => return Err(io::Error::other("cloud-init: invalid user-data file").into()),
+    };
+
+    ssh_authorized_keys.push(container_pub_key.into());
+
+    // generate iso
+
     {
         let mut f = File::create(user_data_path)?;
         f.write_all(b"#cloud-config\n")?;
         serde_yaml::to_writer(&mut f, &user_data)?;
     }
-
-    // generate iso
 
     let status = Command::new("genisoimage")
         .arg("-output")
