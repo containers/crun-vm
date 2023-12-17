@@ -56,7 +56,16 @@ done
 
 # launch VM
 
-virsh \
+function __ensure_tty() {
+    if [[ -t 0 ]]; then
+        "$@"
+    else
+        # 'virsh console' requires stdin to be a tty
+        script --return --quiet /dev/null --command "${*@Q}"
+    fi
+}
+
+__ensure_tty virsh \
     --connect qemu+unix:///session?socket=/run/libvirt/virtqemud-sock \
     --quiet \
     create \

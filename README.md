@@ -40,6 +40,14 @@ ctrl-q`. Afterwards, reattach by running:
 $ podman attach --latest
 ```
 
+This command also works when you start the VM in detached mode using
+podman-run's `-d`/`--detach` flags.
+
+It's also possible to omit flags `-i`/`--interactive` and `-t`/`-tty` to
+podman-run, in which case you won't be able to interact with the VM but can
+still observe its console. Note that pressing `ctrl-]` will have no effect, so
+use `podman container rm --force --time=0 ...` to terminate the VM instead.
+
 ## Using containerized VM images
 
 This runtime also works with container images that contain a VM image file with
