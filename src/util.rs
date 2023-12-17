@@ -41,7 +41,15 @@ where
     }
 }
 
-pub fn get_image_format(image_path: impl AsRef<Path>) -> io::Result<String> {
+#[derive(Deserialize)]
+pub struct ImageInfo {
+    #[serde(rename = "virtual-size")]
+    pub size: u64,
+
+    pub format: String,
+}
+
+pub fn get_image_info(image_path: impl AsRef<Path>) -> io::Result<ImageInfo> {
     let output = Command::new("qemu-img")
         .arg("info")
         .arg("--output=json")
@@ -53,32 +61,26 @@ pub fn get_image_format(image_path: impl AsRef<Path>) -> io::Result<String> {
         return Err(io::Error::other("qemu-img failed"));
     }
 
-    #[derive(Deserialize)]
-    struct ImageInfo {
-        format: String,
-    }
-
-    let info: ImageInfo = serde_json::from_slice(&output.stdout)?;
-
-    Ok(info.format)
+    Ok(serde_json::from_slice(&output.stdout)?)
 }
 
 pub fn create_overlay_image(
     overlay_image_path: impl AsRef<Path>,
     backing_image_path: impl AsRef<Path>,
+    backing_image_info: &ImageInfo,
 ) -> io::Result<()> {
-    let backing_image_format = get_image_format(backing_image_path.as_ref())?;
-
     let status = Command::new("qemu-img")
         .arg("create")
         .arg("-q")
         .arg("-f")
         .arg("qcow2")
+        .arg("-u")
         .arg("-F")
-        .arg(backing_image_format)
+        .arg(&backing_image_info.format)
         .arg("-b")
         .arg(backing_image_path.as_ref())
         .arg(overlay_image_path.as_ref())
+        .arg(backing_image_info.size.to_string())
         .spawn()?
         .wait()?;
 

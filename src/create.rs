@@ -10,7 +10,7 @@ use xml::writer::XmlEvent;
 
 use crate::util::{
     create_overlay_image, crun, find_single_file_in_directories, generate_cloud_init_iso,
-    get_image_format,
+    get_image_info,
 };
 
 pub fn create(
@@ -33,11 +33,8 @@ pub fn create(
         .as_ref()
         .expect("config.json includes configuration for the container's root filesystem");
 
-    let vm_image_path = find_single_file_in_directories([
-        args.bundle.join(root.path()),
-        args.bundle.join(root.path()).join("disk"),
-    ])?;
-    let vm_image_format = get_image_format(&vm_image_path)?;
+    let vm_image_path = find_single_file_in_directories([root.path(), &root.path().join("disk")])?;
+    let vm_image_info = get_image_info(&vm_image_path)?;
 
     // prepare root filesystem for runner container
 
@@ -52,7 +49,7 @@ pub fn create(
     // create overlay image
 
     let overlay_image_path = runner_root_path.join("crun-qemu/image-overlay.qcow2");
-    create_overlay_image(overlay_image_path, &vm_image_path)?;
+    create_overlay_image(overlay_image_path, "/crun-qemu/image", &vm_image_info)?;
 
     // adjust config for runner container
 
@@ -188,7 +185,7 @@ pub fn create(
 
     write_domain_xml(
         runner_root_path.join("crun-qemu/domain.xml"),
-        &vm_image_format,
+        &vm_image_info.format,
         &virtiofs_mounts,
         needs_cloud_init,
     )?;

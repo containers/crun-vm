@@ -1,14 +1,8 @@
 # The `crun-qemu` OCI runtime
 
-This is an **experimental** [OCI Runtime] implementation that enables `podman
-run` to work with VM images packaged in container images. The objective is to
-make running VMs (in simple configurations) as easy as running containers, while
-leveraging the existing container image distribution infrastructure.
-
-The runtime expects container images to contain a VM image file with any name
-under `/` or under `/disk/`. No other files may exist in those directories.
-(This convention is followed by KubeVirt `containerDisk`s, so you can use those
-containers with this runtime.)
+This is an **experimental** [OCI Runtime] that enables `podman run` to work with
+VM images. The objective is to make running VMs (in simple configurations) as
+easy as running containers.
 
 ## Trying it out
 
@@ -19,14 +13,21 @@ $ dnf install bash coreutils crun genisoimage libvirt-client libvirt-daemon-driv
 $ cargo build
 ```
 
-Then try it out with an example image:
+Then obtain a QEMU-compatible VM image and place it in a directory by itself:
+
+```console
+$ mkdir my-vm-image
+$ curl -LO --output-dir my-vm-image https://download.fedoraproject.org/pub/fedora/linux/releases/39/Cloud/x86_64/images/Fedora-Cloud-Base-39-1.5.x86_64.qcow2
+```
+
+And try it out:
 
 ```console
 $ podman run \
     --runtime="$PWD"/target/debug/crun-qemu \
     --security-opt label=disable \
     -it --rm \
-    quay.io/containerdisks/fedora:39 \
+    --rootfs my-vm-image \
     unused
 ```
 
@@ -38,6 +39,26 @@ ctrl-q`. Afterwards, reattach by running:
 ```console
 $ podman attach --latest
 ```
+
+## Using containerized VM images
+
+This runtime also works with container images that contain a VM image file with
+any name under `/` or under `/disk/`. No other files may exist in those
+directories. Containers built for use as [KubeVirt `containerDisk`s] follow this
+convention, so you can use those here:
+
+```console
+$ podman run \
+    --runtime="$PWD"/target/debug/crun-qemu \
+    --security-opt label=disable \
+    -it --rm \
+    quay.io/containerdisks/fedora:39 \
+    unused
+```
+
+You can also use `util/package-vm-image.sh` to easily package a VM image into a
+container image, and `util/extract-vm-image.sh` to extract a VM image contained
+in a container image.
 
 ## Using your own VM images
 
@@ -113,6 +134,7 @@ This project is released under the GPL 2.0 (or later) license. See
 
 [cloud-init]: https://cloud-init.io/
 [crun]: https://github.com/containers/crun
+[KubeVirt `containerDisk`s]: https://kubevirt.io/user-guide/virtual_machines/disks_and_volumes/#containerdisk
 [libvirt]: https://libvirt.org/
 [OCI Runtime]: https://github.com/opencontainers/runtime-spec/blob/v1.1.0/spec.md
 [QEMU]: https://www.qemu.org/

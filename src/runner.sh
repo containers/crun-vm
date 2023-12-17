@@ -14,6 +14,12 @@ mkdir -p \
 # avoid "Unable to set XATTR trusted.libvirt.security.dac" error
 echo 'remember_owner = 0' >> /etc/libvirt/qemu.conf
 
+# avoid having libvirt change the VM image file's ownership, and run QEMU as the
+# user running the container so that it can still access the image
+echo 'dynamic_ownership = 0' >> /etc/libvirt/qemu.conf
+echo 'user = "root"' >> /etc/libvirt/qemu.conf
+echo 'group = "root"' >> /etc/libvirt/qemu.conf
+
 # disable libvirt cgroups management, since we're already in a container
 echo 'cgroup_controllers = []' >> /etc/libvirt/qemu.conf
 
@@ -21,9 +27,6 @@ echo 'cgroup_controllers = []' >> /etc/libvirt/qemu.conf
 # doesn't seem to work in unprivileged containers
 groupadd virtiofsd
 useradd --system --key MAIL_DIR=/dev/null --group virtiofsd virtiofsd
-
-# so qemu can access the virtiofsd sockets
-usermod --append --groups virtiofsd qemu
 
 virtlogd --daemon
 virtqemud --daemon
