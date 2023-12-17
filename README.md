@@ -105,8 +105,8 @@ You should now be able to login with the default `fedora` username and password
 ## How it works
 
 Internally, the `crun-qemu` runtime uses [crun] to run a different container
-that in turn uses [libvirt] to run a [QEMU] guest based on the VM image included
-in the user-specified container.
+that in turn uses [libvirt] to run a [QEMU] guest using the user-specified VM
+image.
 
 ## License
 
