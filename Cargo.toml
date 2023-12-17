@@ -14,6 +14,10 @@ features = ["cargo", "derive", "std"]
 version = "0.3.0"
 default-features = false
 
+[dependencies.num_cpus]
+version = "1.16"
+default-features = false
+
 [dependencies.oci-spec]
 version = "0.6.0"
 default-features = false

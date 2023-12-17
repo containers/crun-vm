@@ -188,6 +188,7 @@ pub fn create(
         &vm_image_info.format,
         &virtiofs_mounts,
         needs_cloud_init,
+        &spec,
     )?;
 
     // create runner container
@@ -202,11 +203,46 @@ struct VirtiofsMount {
     target: String,
 }
 
+fn get_vcpu_count(spec: &oci_spec::runtime::Spec) -> u64 {
+    let vcpu_count = (|| {
+        let linux_cpu = spec
+            .linux()
+            .as_ref()?
+            .resources()
+            .as_ref()?
+            .cpu()
+            .as_ref()?;
+
+        let quota: u64 = linux_cpu.quota()?.try_into().ok()?;
+        let period: u64 = linux_cpu.period()?;
+
+        // return "quota / period" rounded up
+        quota
+            .checked_add(period)?
+            .checked_sub(1)?
+            .checked_div(period)
+    })();
+
+    vcpu_count.unwrap_or_else(|| num_cpus::get().try_into().unwrap())
+}
+
+fn get_cpu_set(spec: &oci_spec::runtime::Spec) -> Option<String> {
+    spec.linux()
+        .as_ref()?
+        .resources()
+        .as_ref()?
+        .cpu()
+        .as_ref()?
+        .cpus()
+        .clone()
+}
+
 fn write_domain_xml(
     path: impl AsRef<Path>,
     image_format: &str,
     virtiofs_mounts: &[VirtiofsMount],
     needs_cloud_init: bool,
+    spec: &oci_spec::runtime::Spec,
 ) -> Result<(), Box<dyn Error>> {
     // section
     fn s(
@@ -254,7 +290,12 @@ fn write_domain_xml(
         st(w, "name", &[], "domain")?;
 
         se(w, "cpu", &[("mode", "host-model")])?;
-        st(w, "vcpu", &[], "2")?;
+        let vcpus = get_vcpu_count(spec).to_string();
+        if let Some(cpu_set) = get_cpu_set(spec) {
+            st(w, "vcpu", &[("cpuset", cpu_set.as_str())], vcpus.as_str())?;
+        } else {
+            st(w, "vcpu", &[], vcpus.as_str())?;
+        }
 
         st(w, "memory", &[("unit", "GiB")], "2")?;
 
