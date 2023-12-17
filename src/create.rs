@@ -4,7 +4,7 @@ use std::error::Error;
 use std::fs::{self, File, Permissions};
 use std::io::{self, Write};
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use xml::writer::XmlEvent;
 
@@ -24,18 +24,18 @@ pub fn create(
         .expect("path is utf-8")
         .to_string();
 
-    let mut spec = libocispec::runtime::Spec::load(&config_path)?;
+    let mut spec = oci_spec::runtime::Spec::load(&config_path)?;
 
     // find VM image
 
     let root = spec
-        .root
+        .root()
         .as_ref()
         .expect("config.json includes configuration for the container's root filesystem");
 
     let vm_image_path = find_single_file_in_directories([
-        args.bundle.join(&root.path),
-        args.bundle.join(&root.path).join("disk"),
+        args.bundle.join(root.path()),
+        args.bundle.join(root.path()).join("disk"),
     ])?;
     let vm_image_format = get_image_format(&vm_image_path)?;
 
@@ -56,114 +56,122 @@ pub fn create(
 
     // adjust config for runner container
 
-    spec.root = Some(libocispec::runtime::Root {
-        path: runner_root_path
-            .to_str()
-            .expect("path is utf-8")
-            .to_string(),
-        readonly: None,
+    spec.set_root(Some(
+        oci_spec::runtime::RootBuilder::default()
+            .path(&runner_root_path)
+            .readonly(false)
+            .build()?,
+    ));
+
+    spec.set_process({
+        let mut process = spec.process().clone().expect("process config");
+        process.set_cwd("/".into());
+        process.set_command_line(None);
+        process.set_args(Some(vec!["/crun-qemu/runner.sh".to_string()]));
+        Some(process)
     });
 
-    let process = spec.process.as_mut().expect("process config");
-    process.cwd = "/".to_string();
-    process.command_line = None;
-    process.args = Some(vec!["/crun-qemu/runner.sh".to_string()]);
+    spec.set_linux({
+        let mut linux = spec.linux().clone().expect("linux config");
 
-    let linux = spec.linux.as_mut().expect("linux config");
-    let devices = linux.devices.get_or_insert_with(Vec::new);
+        linux.set_devices({
+            let mut devices = linux.devices().clone().unwrap_or_default();
 
-    let kvm_major_minor = fs::metadata("/dev/kvm")?.rdev();
-    devices.push(libocispec::runtime::LinuxDevice {
-        file_mode: None,
-        gid: None,
-        major: Some((kvm_major_minor >> 8).try_into().unwrap()),
-        minor: Some((kvm_major_minor & 0xff).try_into().unwrap()),
-        path: "/dev/kvm".to_string(),
-        device_type: "char".to_string(),
-        uid: None,
-    });
+            let kvm_major_minor = fs::metadata("/dev/kvm")?.rdev();
+            devices.push(
+                oci_spec::runtime::LinuxDeviceBuilder::default()
+                    .typ(oci_spec::runtime::LinuxDeviceType::C)
+                    .path("/dev/kvm")
+                    .major(i64::try_from(kvm_major_minor >> 8).unwrap())
+                    .minor(i64::try_from(kvm_major_minor & 0xff).unwrap())
+                    .build()?,
+            );
 
-    let mounts = spec.mounts.get_or_insert_with(Vec::new);
-
-    let ignore_mounts = [
-        "/cloud-init",
-        "/dev",
-        "/etc/hostname",
-        "/etc/hosts",
-        "/etc/resolv.conf",
-        "/proc",
-        "/run/.containerenv",
-        "/run/secrets",
-        "/sys",
-        "/sys/fs/cgroup",
-    ];
-
-    let virtiofs_mounts: Vec<_> = mounts
-        .iter_mut()
-        .filter(|m| {
-            m.mount_type == Some("bind".to_string())
-                && !m.destination.starts_with("/dev/")
-                && !ignore_mounts.contains(&m.destination.as_str())
-        })
-        .enumerate()
-        .map(|(i, m)| {
-            let virtiofs_tag_in_guest = m.destination.clone();
-            m.destination = format!("/crun-qemu/mounts/{}", i);
-            VirtiofsMount {
-                socket: format!("/crun-qemu/mounts/virtiofsd/{}", i),
-                target: virtiofs_tag_in_guest,
-            }
-        })
-        .collect();
-
-    let mut cloudinit_mounts: Vec<(usize, _)> = mounts
-        .iter()
-        .enumerate()
-        .filter(|(_, m)| m.mount_type == Some("bind".to_string()) && m.destination == "/cloud-init")
-        .map(|(i, m)| (i, m.source.clone()))
-        .collect();
-
-    let cloudinit_config = if cloudinit_mounts.len() > 1 {
-        return Err(Box::new(io::Error::other("more than one cloud-init mount")));
-    } else if let Some((i, source)) = cloudinit_mounts.pop() {
-        mounts.remove(i);
-        source
-    } else {
-        None
-    };
-
-    for path in ["/bin", "/dev/log", "/etc/pam.d", "/lib", "/lib64", "/usr"] {
-        mounts.push(libocispec::runtime::Mount {
-            destination: path.to_string(),
-            gid_mappings: None,
-            options: Some(vec![
-                "bind".to_string(),
-                "rprivate".to_string(),
-                "readonly".to_string(),
-            ]),
-            source: Some(path.to_string()),
-            mount_type: Some("bind".to_string()),
-            uid_mappings: None,
+            Some(devices)
         });
-    }
 
-    fs::create_dir_all(runner_root_path.join("etc"))?;
-    fs::copy("/etc/passwd", runner_root_path.join("etc/passwd"))?;
-    fs::copy("/etc/group", runner_root_path.join("etc/group"))?;
+        Some(linux)
+    });
 
-    mounts.push(libocispec::runtime::Mount {
-        destination: "/crun-qemu/image".to_string(),
-        gid_mappings: None,
-        options: Some(vec!["bind".to_string(), "rprivate".to_string()]),
-        source: Some(
-            vm_image_path
-                .canonicalize()?
-                .to_str()
-                .expect("path is utf-8")
-                .to_string(),
-        ),
-        mount_type: Some("bind".to_string()),
-        uid_mappings: None,
+    let virtiofs_mounts: Vec<VirtiofsMount>;
+    let cloudinit_config: Option<PathBuf>;
+
+    spec.set_mounts({
+        let mut mounts = spec.mounts().clone().unwrap_or_default();
+
+        let ignore_mounts = [
+            "/cloud-init",
+            "/dev",
+            "/etc/hostname",
+            "/etc/hosts",
+            "/etc/resolv.conf",
+            "/proc",
+            "/run/.containerenv",
+            "/run/secrets",
+            "/sys",
+            "/sys/fs/cgroup",
+        ];
+
+        virtiofs_mounts = mounts
+            .iter_mut()
+            .filter(|m| {
+                m.typ() == &Some("bind".to_string())
+                    && !m.destination().starts_with("/dev/")
+                    && !ignore_mounts.contains(&m.destination().to_string_lossy().as_ref())
+            })
+            .enumerate()
+            .map(|(i, m)| {
+                let socket = format!("/crun-qemu/mounts/virtiofsd/{}", i);
+                let target = m.destination().to_str().unwrap().to_string();
+                m.set_destination(Path::new("/crun-qemu/mounts").join(i.to_string()));
+                VirtiofsMount { socket, target }
+            })
+            .collect();
+
+        let mut cloudinit_mounts: Vec<(usize, _)> = mounts
+            .iter()
+            .enumerate()
+            .filter(|(_, m)| {
+                m.typ() == &Some("bind".to_string())
+                    && m.destination().to_str() == Some("/cloud-init")
+            })
+            .map(|(i, m)| (i, m.source().clone()))
+            .collect();
+
+        cloudinit_config = if cloudinit_mounts.len() > 1 {
+            return Err(Box::new(io::Error::other("more than one cloud-init mount")));
+        } else if let Some((i, source)) = cloudinit_mounts.pop() {
+            mounts.remove(i);
+            source
+        } else {
+            None
+        };
+
+        for path in ["/bin", "/dev/log", "/etc/pam.d", "/lib", "/lib64", "/usr"] {
+            mounts.push(
+                oci_spec::runtime::MountBuilder::default()
+                    .typ("bind")
+                    .source(path)
+                    .destination(path)
+                    .options(["bind".to_string(), "rprivate".to_string(), "ro".to_string()])
+                    .build()?,
+            );
+        }
+
+        fs::create_dir_all(runner_root_path.join("etc"))?;
+        fs::copy("/etc/passwd", runner_root_path.join("etc/passwd"))?;
+        fs::copy("/etc/group", runner_root_path.join("etc/group"))?;
+
+        mounts.push(
+            oci_spec::runtime::MountBuilder::default()
+                .typ("bind")
+                .source(vm_image_path.canonicalize()?)
+                .destination("/crun-qemu/image")
+                .options(["bind".to_string(), "rprivate".to_string()])
+                .build()?,
+        );
+
+        Some(mounts)
     });
 
     spec.save(&config_path)?;

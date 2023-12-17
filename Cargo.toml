@@ -14,15 +14,10 @@ features = ["cargo", "derive", "std"]
 version = "0.3.0"
 default-features = false
 
-[dependencies.libocispec]
-# git = "https://github.com/containers/libocispec"
-# rev = "3d168261f250477061fe0eb3648bf998c70c6519"
-
-# TODO: contribute the necessary changes upstream
-git = "https://github.com/albertofaria/libocispec"
-rev = "3d1e44e26d6fd50a9ba33f9cc6dd49992c429e9f"
-
-# TODO: maybe we can use https://github.com/containers/oci-spec-rs instead
+[dependencies.oci-spec]
+version = "0.6.0"
+default-features = false
+features = ["runtime"]
 
 [dependencies.serde]
 version = "1.0"
