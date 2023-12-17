@@ -60,25 +60,6 @@ You can also use `util/package-vm-image.sh` to easily package a VM image into a
 container image, and `util/extract-vm-image.sh` to extract a VM image contained
 in a container image.
 
-## Using your own VM images
-
-Use the `package-vm-image.sh` script to package a VM image file into a container
-image:
-
-```console
-$ util/package-vm-image.sh
-Usage: util/package-vm-image.sh <vm_image_file> <container_image_tag>
-Package a given VM image file into a container image and tag it.
-
-$ util/package-vm-image.sh my-vm-image.qcow2 my-vm-container-image:v1
-STEP 1/2: FROM scratch
-STEP 2/2: COPY 'my-vm-image.qcow2' '/my-vm-image.qcow2'
-COMMIT my-vm-container-image:v1
---> 0b6a775fdc37
-Successfully tagged localhost/my-vm-container-image:v1
-0b6a775fdc377c0ec65fb67b54c524c707718f50193fa513a2e309aa08424635
-```
-
 ## Bind mounts
 
 Bind mounts are passed through to the VM as [virtiofs] file systems:
