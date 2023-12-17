@@ -50,7 +50,7 @@ Package a given VM image file into a container image and tag it.
 
 $ util/package-vm-image.sh my-vm-image.qcow2 my-vm-container-image:v1
 STEP 1/2: FROM scratch
-STEP 2/2: COPY 'my-vm-image.qcow2' /image
+STEP 2/2: COPY 'my-vm-image.qcow2' '/my-vm-image.qcow2'
 COMMIT my-vm-container-image:v1
 --> 0b6a775fdc37
 Successfully tagged localhost/my-vm-container-image:v1
