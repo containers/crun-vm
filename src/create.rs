@@ -6,6 +6,7 @@ use std::io::{self, Write};
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
+use sysinfo::SystemExt;
 use xml::writer::XmlEvent;
 
 use crate::util::{
@@ -226,6 +227,27 @@ fn get_vcpu_count(spec: &oci_spec::runtime::Spec) -> u64 {
     vcpu_count.unwrap_or_else(|| num_cpus::get().try_into().unwrap())
 }
 
+fn get_memory_size(spec: &oci_spec::runtime::Spec) -> u64 {
+    let memory_size: Option<u64> = (|| {
+        spec.linux()
+            .as_ref()?
+            .resources()
+            .as_ref()?
+            .memory()
+            .as_ref()?
+            .limit()?
+            .try_into()
+            .ok()
+    })();
+
+    memory_size.unwrap_or_else(|| {
+        let mut system =
+            sysinfo::System::new_with_specifics(sysinfo::RefreshKind::new().with_memory());
+        system.refresh_memory();
+        system.total_memory()
+    })
+}
+
 fn get_cpu_set(spec: &oci_spec::runtime::Spec) -> Option<String> {
     spec.linux()
         .as_ref()?
@@ -297,7 +319,8 @@ fn write_domain_xml(
             st(w, "vcpu", &[], vcpus.as_str())?;
         }
 
-        st(w, "memory", &[("unit", "GiB")], "2")?;
+        let memory = get_memory_size(spec).to_string();
+        st(w, "memory", &[("unit", "b")], memory.as_str())?;
 
         s(w, "os", &[], |w| {
             st(w, "type", &[("arch", "x86_64"), ("machine", "q35")], "hvm")
