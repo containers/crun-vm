@@ -115,6 +115,7 @@ where
 pub fn generate_cloud_init_iso(
     source_config_path: Option<impl AsRef<Path>>,
     runner_root: impl AsRef<Path>,
+    block_device_targets: impl IntoIterator<Item = impl AsRef<Path>>,
     virtiofs_mounts: impl IntoIterator<Item = impl AsRef<str>>,
     container_pub_key: &str,
 ) -> Result<bool, Box<dyn Error>> {
@@ -210,6 +211,40 @@ pub fn generate_cloud_init_iso(
     };
 
     ssh_authorized_keys.push(container_pub_key.into());
+
+    // create block device symlinks
+
+    if !user_data_mapping.contains_key("runcmd") {
+        user_data_mapping.insert("runcmd".into(), serde_yaml::Value::Sequence(vec![]));
+    }
+
+    let runcmd = match user_data_mapping.get_mut("runcmd").unwrap() {
+        serde_yaml::Value::Sequence(cmds) => cmds,
+        _ => return Err(io::Error::other("cloud-init: invalid user-data file").into()),
+    };
+
+    for (i, target) in block_device_targets.into_iter().enumerate() {
+        let target: &Path = target.as_ref();
+        let parent = match target.parent() {
+            Some(path) if path.to_str() != Some("") => Some(path),
+            _ => None,
+        };
+
+        if let Some(parent) = parent {
+            runcmd.push(serde_yaml::Value::Sequence(vec![
+                "mkdir".into(),
+                "-p".into(),
+                parent.to_str().expect("path is utf-8").into(),
+            ]));
+        }
+
+        runcmd.push(serde_yaml::Value::Sequence(vec![
+            "ln".into(),
+            "--symbolic".into(),
+            format!("/dev/disk/by-id/virtio-crun-qemu-bdev-{i}").into(),
+            target.to_str().expect("path is utf-8").into(),
+        ]));
+    }
 
     // generate iso
 

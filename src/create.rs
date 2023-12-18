@@ -3,7 +3,7 @@
 use std::error::Error;
 use std::fs::{self, File, Permissions};
 use std::io::{self, Write};
-use std::os::unix::fs::{MetadataExt, PermissionsExt};
+use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -70,11 +70,22 @@ pub fn create(
         Some(process)
     });
 
+    let mut block_devices: Vec<BlockDevice>;
+
     spec.set_linux({
         let mut linux = spec.linux().clone().expect("linux config");
 
         linux.set_devices({
             let mut devices = linux.devices().clone().unwrap_or_default();
+
+            block_devices = devices
+                .iter()
+                .filter(|d| d.typ() == oci_spec::runtime::LinuxDeviceType::B)
+                .map(|d| BlockDevice {
+                    source: format!("/dev/block/{}:{}", d.major(), d.minor()),
+                    target: d.path().to_path_buf(),
+                })
+                .collect();
 
             let kvm_major_minor = fs::metadata("/dev/kvm")?.rdev();
             devices.push(
@@ -92,7 +103,7 @@ pub fn create(
         Some(linux)
     });
 
-    let virtiofs_mounts: Vec<VirtiofsMount>;
+    let mut virtiofs_mounts: Vec<VirtiofsMount> = Vec::new();
     let cloudinit_config: Option<PathBuf>;
     let pub_key: String;
 
@@ -112,21 +123,32 @@ pub fn create(
             "/sys/fs/cgroup",
         ];
 
-        virtiofs_mounts = mounts
+        for (i, m) in mounts
             .iter_mut()
-            .filter(|m| {
-                m.typ() == &Some("bind".to_string())
+            .filter(|m| m.typ() == &Some("bind".to_string()))
+            .enumerate()
+        {
+            if let Some(path) = m.source() {
+                let meta = path.metadata()?;
+
+                if meta.file_type().is_block_device() {
+                    let new_dest = format!("/crun-qemu/bdevs/{}", i);
+                    block_devices.push(BlockDevice {
+                        source: new_dest.clone(),
+                        target: m.destination().to_path_buf(),
+                    });
+                    m.set_destination(PathBuf::from(new_dest));
+                } else if meta.file_type().is_dir()
                     && !m.destination().starts_with("/dev/")
                     && !ignore_mounts.contains(&m.destination().to_string_lossy().as_ref())
-            })
-            .enumerate()
-            .map(|(i, m)| {
-                let socket = format!("/crun-qemu/mounts/virtiofsd/{}", i);
-                let target = m.destination().to_str().unwrap().to_string();
-                m.set_destination(Path::new("/crun-qemu/mounts").join(i.to_string()));
-                VirtiofsMount { socket, target }
-            })
-            .collect();
+                {
+                    let socket = format!("/crun-qemu/mounts/virtiofsd/{}", i);
+                    let target = m.destination().to_str().unwrap().to_string();
+                    m.set_destination(Path::new("/crun-qemu/mounts").join(i.to_string()));
+                    virtiofs_mounts.push(VirtiofsMount { socket, target });
+                }
+            }
+        }
 
         let mut cloudinit_mounts: Vec<(usize, _)> = mounts
             .iter()
@@ -195,6 +217,7 @@ pub fn create(
     let needs_cloud_init = generate_cloud_init_iso(
         cloudinit_config,
         &runner_root_path,
+        block_devices.iter().map(|d| &d.target),
         virtiofs_mounts.iter().map(|m| &m.target),
         pub_key.trim(),
     )?;
@@ -204,6 +227,7 @@ pub fn create(
     write_domain_xml(
         runner_root_path.join("crun-qemu/domain.xml"),
         &vm_image_info.format,
+        &block_devices,
         &virtiofs_mounts,
         needs_cloud_init,
         &spec,
@@ -214,6 +238,11 @@ pub fn create(
     crun_create(global_args, args)?;
 
     Ok(())
+}
+
+struct BlockDevice {
+    source: String,
+    target: PathBuf,
 }
 
 struct VirtiofsMount {
@@ -279,6 +308,7 @@ fn get_cpu_set(spec: &oci_spec::runtime::Spec) -> Option<String> {
 fn write_domain_xml(
     path: impl AsRef<Path>,
     image_format: &str,
+    block_devices: &[BlockDevice],
     virtiofs_mounts: &[VirtiofsMount],
     needs_cloud_init: bool,
     spec: &oci_spec::runtime::Spec,
@@ -361,8 +391,15 @@ fn write_domain_xml(
                 se(w, "target", &[("type", "serial"), ("port", "0")])
             })?;
 
+            let mut next_dev_index = 0;
+            let mut next_dev_name = || {
+                let i = next_dev_index;
+                next_dev_index += 1;
+                format!("vd{}", ('a'..='z').cycle().nth(i).unwrap())
+            };
+
             s(w, "disk", &[("type", "file"), ("device", "disk")], |w| {
-                se(w, "target", &[("dev", "vda"), ("bus", "virtio")])?;
+                se(w, "target", &[("dev", &next_dev_name()), ("bus", "virtio")])?;
                 se(w, "driver", &[("name", "qemu"), ("type", "qcow2")])?;
                 se(w, "source", &[("file", "/crun-qemu/image-overlay.qcow2")])?;
                 s(w, "backingStore", &[("type", "file")], |w| {
@@ -374,6 +411,15 @@ fn write_domain_xml(
                 Ok(())
             })?;
 
+            for (i, dev) in block_devices.iter().enumerate() {
+                s(w, "disk", &[("type", "block"), ("device", "disk")], |w| {
+                    se(w, "target", &[("dev", &next_dev_name()), ("bus", "virtio")])?;
+                    se(w, "source", &[("dev", &dev.source)])?;
+                    st(w, "serial", &[], &format!("crun-qemu-bdev-{i}"))?;
+                    Ok(())
+                })?;
+            }
+
             if needs_cloud_init {
                 s(w, "disk", &[("type", "file"), ("device", "disk")], |w| {
                     se(
@@ -382,7 +428,7 @@ fn write_domain_xml(
                         &[("file", "/crun-qemu/cloud-init/cloud-init.iso")],
                     )?;
                     se(w, "driver", &[("name", "qemu"), ("type", "raw")])?;
-                    se(w, "target", &[("dev", "vdb"), ("bus", "virtio")])?;
+                    se(w, "target", &[("dev", &next_dev_name()), ("bus", "virtio")])?;
                     Ok(())
                 })?;
             }

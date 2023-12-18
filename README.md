@@ -129,6 +129,24 @@ If you actually just want to exec into the container in which the VM is running
 (probably to debug some problem with `crun-qemu` itself), pass in `-` as the
 username.
 
+## Passing block devices through to the VM
+
+It is possible to pass block devices through to the VM using podman-run's
+`--device` flag:
+
+```console
+$ podman run \
+    --runtime="$PWD"/target/debug/crun-qemu \
+    --security-opt label=disable \
+    -it --rm \
+    --device /dev/ram0:/path/in/vm/my-disk \
+    quay.io/containerdisks/fedora:39 \
+    unused
+```
+
+You can also pass them in as bind mounts using the `-v`/`--volume` or `--mount`
+flags.
+
 ## How it works
 
 Internally, the `crun-qemu` runtime uses [crun] to run a different container
