@@ -15,7 +15,7 @@ output_vm_image_file=$2
 temp_dir=$( mktemp -d )
 trap 'rm -fr "${temp_dir}"' EXIT
 
-container_id=$( podman container create --quiet "${container_image_tag}" unused )
+container_id=$( podman container create --quiet "${container_image_tag}" "" )
 trap 'podman container rm "${container_id}" >/dev/null; rm -fr "${temp_dir}"' EXIT
 
 podman container export -o "${temp_dir}/root.tar" "${container_id}"

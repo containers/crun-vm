@@ -13,7 +13,7 @@ fn podman_run_raw() {
         container_name,
         "-dit",
         "quay.io/kubevirt/alpine-container-disk-demo",
-        "unused",
+        "",
     ]));
 
     expect_success(podman(["rm", "--force", "--time=0", container_name]));
@@ -28,7 +28,7 @@ fn podman_run_qcow2() {
         container_name,
         "-dit",
         "quay.io/containerdisks/fedora:39",
-        "unused",
+        "",
     ]));
 
     expect_success(podman(["rm", "--force", "--time=0", container_name]));
@@ -38,7 +38,7 @@ fn podman_run_qcow2() {
 fn podman_run_invalid() {
     let container_name = "crun-qemu-test-podman_run_invalid";
 
-    let output = podman_run(["--name", container_name, "-dit", "fedora:39", "unused"]);
+    let output = podman_run(["--name", container_name, "-dit", "fedora:39", ""]);
 
     let _ = podman(["rm", "--force", "--time=0", container_name]);
 
@@ -53,11 +53,10 @@ fn podman_run_mounts() {
         "--name",
         container_name,
         "-dit",
-        &format!("-v={}/examples/cloud-init/config:/cloud-init", REPO_PATH),
-        &format!("-v={}/examples/ignition/config.ign:/ignition", REPO_PATH),
-        &format!("-v={}/util:/home/fedora/util", REPO_PATH),
+        &format!("-v={REPO_PATH}/util:/home/fedora/util"),
         "quay.io/containerdisks/fedora:39",
-        "unused",
+        &format!("--cloud-init={REPO_PATH}/examples/cloud-init/config"),
+        &format!("--ignition={REPO_PATH}/examples/ignition/config.ign"),
     ]));
 
     expect_success(podman(["rm", "--force", "--time=0", container_name]));

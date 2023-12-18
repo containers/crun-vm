@@ -24,11 +24,11 @@ And try it out:
 
 ```console
 $ podman run \
-    --runtime="$PWD"/target/debug/crun-qemu \
+    --runtime "$PWD"/target/debug/crun-qemu \
     --security-opt label=disable \
     -it --rm \
     --rootfs my-vm-image \
-    unused
+    ""
 ```
 
 The VM console should take over your terminal. To abort the VM, press `ctrl-]`.
@@ -57,11 +57,11 @@ convention, so you can use those here:
 
 ```console
 $ podman run \
-    --runtime="$PWD"/target/debug/crun-qemu \
+    --runtime "$PWD"/target/debug/crun-qemu \
     --security-opt label=disable \
     -it --rm \
     quay.io/containerdisks/fedora:39 \
-    unused
+    ""
 ```
 
 You can also use `util/package-vm-image.sh` to easily package a VM image into a
@@ -74,12 +74,12 @@ Bind mounts are passed through to the VM as [virtiofs] file systems:
 
 ```console
 $ podman run \
-    --runtime="$PWD"/target/debug/crun-qemu \
+    --runtime "$PWD"/target/debug/crun-qemu \
     --security-opt label=disable \
     -it --rm \
     -v ./util:/home/fedora/util \
     quay.io/containerdisks/fedora:39 \
-    unused
+    ""
 ```
 
 If the VM image support cloud-init, the volume will automatically be mounted
@@ -99,12 +99,11 @@ $ ls examples/cloud-init/config/
 meta-data  user-data  vendor-data
 
 $ podman run \
-    --runtime="$PWD"/target/debug/crun-qemu \
+    --runtime "$PWD"/target/debug/crun-qemu \
     --security-opt label=disable \
     -it --rm \
-    -v ./examples/cloud-init/config:/cloud-init \
     quay.io/containerdisks/fedora:39 \
-    unused
+    --cloud-init examples/cloud-init/config
 ```
 
 You should now be able to login with the default `fedora` username and password
@@ -117,12 +116,11 @@ a bind mount with the special destination `/ignition`:
 
 ```console
 $ podman run \
-    --runtime="$PWD"/target/debug/crun-qemu \
+    --runtime "$PWD"/target/debug/crun-qemu \
     --security-opt label=disable \
     -it --rm \
-    -v ./examples/ignition/config.ign:/ignition \
     quay.io/crun-qemu/fedora-coreos:39 \
-    unused
+    --ignition examples/ignition/config.ign
 ```
 
 You should now be able to login with the default `core` username and password
@@ -154,12 +152,12 @@ VM at a specific path using podman-run's `--device` flag:
 
 ```console
 $ podman run \
-    --runtime="$PWD"/target/debug/crun-qemu \
+    --runtime "$PWD"/target/debug/crun-qemu \
     --security-opt label=disable \
     -it --rm \
     --device /dev/ram0:/path/in/vm/my-disk \
     quay.io/containerdisks/fedora:39 \
-    unused
+    ""
 ```
 
 You can also pass them in as bind mounts using the `-v`/`--volume` or `--mount`

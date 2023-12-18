@@ -3,10 +3,12 @@
 use std::error::Error;
 use std::fs::{self, File, Permissions};
 use std::io::{self, Write};
+use std::iter;
 use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use clap::Parser;
 use sysinfo::SystemExt;
 use xml::writer::XmlEvent;
 
@@ -60,13 +62,33 @@ pub fn create(
             .build()?,
     ));
 
+    let custom_options: CustomOptions;
+
     spec.set_process({
         let mut process = spec.process().clone().expect("process config");
+
+        // TODO: We currently assume that no entrypoint is given (either by being set by in the
+        // container image or through --entrypoint). Must somehow find whether the first arg is the
+        // entrypoint and ignore it in that case.
+        custom_options = CustomOptions::parse_from(
+            iter::once(&"podman run ... <image>".to_string()).chain(
+                process
+                    .args()
+                    .iter()
+                    .flatten()
+                    .filter(|arg| !arg.trim().is_empty()),
+            ),
+        );
+
         process.set_cwd(".".into());
         process.set_command_line(None);
         process.set_args(Some(vec!["/crun-qemu/entrypoint.sh".to_string()]));
         Some(process)
     });
+
+    if let Some(path) = &custom_options.ignition {
+        fs::copy(path, runner_root_path.join("crun-qemu/ignition.ign"))?;
+    }
 
     let mut block_devices: Vec<BlockDevice>;
 
@@ -102,20 +124,16 @@ pub fn create(
     });
 
     let mut virtiofs_mounts: Vec<VirtiofsMount> = Vec::new();
-    let cloudinit_config: Option<PathBuf>;
-    let has_ignition_config: bool;
     let pub_key: String;
 
     spec.set_mounts({
         let mut mounts = spec.mounts().clone().unwrap_or_default();
 
         let ignore_mounts = [
-            "/cloud-init",
             "/dev",
             "/etc/hostname",
             "/etc/hosts",
             "/etc/resolv.conf",
-            "/ignition",
             "/proc",
             "/run/.containerenv",
             "/run/secrets",
@@ -149,50 +167,6 @@ pub fn create(
                 }
             }
         }
-
-        let mut cloudinit_mounts: Vec<(usize, _)> = mounts
-            .iter()
-            .enumerate()
-            .filter(|(_, m)| {
-                m.typ() == &Some("bind".to_string())
-                    && m.destination().to_str() == Some("/cloud-init")
-            })
-            .map(|(i, m)| (i, m.source().clone()))
-            .collect();
-
-        cloudinit_config = if cloudinit_mounts.len() > 1 {
-            return Err(Box::new(io::Error::other("more than one cloud-init mount")));
-        } else if let Some((i, source)) = cloudinit_mounts.pop() {
-            mounts.remove(i);
-            source
-        } else {
-            None
-        };
-
-        let mut ignition_mounts: Vec<(usize, _)> = mounts
-            .iter()
-            .enumerate()
-            .filter(|(_, m)| {
-                m.typ() == &Some("bind".to_string())
-                    && m.destination().to_str() == Some("/ignition")
-            })
-            .map(|(i, m)| (i, m.source().clone()))
-            .collect();
-
-        has_ignition_config = if ignition_mounts.len() > 1 {
-            return Err(Box::new(io::Error::other("more than one Ignition mount")));
-        } else if let Some((i, source)) = ignition_mounts.pop() {
-            mounts.remove(i);
-            match source {
-                Some(source) => {
-                    fs::copy(source, runner_root_path.join("crun-qemu/ignition.ign"))?;
-                    true
-                }
-                None => false,
-            }
-        } else {
-            false
-        };
 
         for path in ["/bin", "/dev/log", "/etc/pam.d", "/lib", "/lib64", "/usr"] {
             mounts.push(
@@ -240,7 +214,7 @@ pub fn create(
     // create cloud-init config
 
     let needs_cloud_init = gen_cloud_init_iso(
-        cloudinit_config,
+        custom_options.cloud_init.as_ref(),
         &runner_root_path,
         block_devices.iter().map(|d| &d.target),
         virtiofs_mounts.iter().map(|m| &m.target),
@@ -255,7 +229,7 @@ pub fn create(
         &block_devices,
         &virtiofs_mounts,
         needs_cloud_init,
-        has_ignition_config,
+        custom_options.ignition.is_some(),
         &spec,
     )?;
 
@@ -264,6 +238,15 @@ pub fn create(
     crun_create(global_args, args)?;
 
     Ok(())
+}
+
+#[derive(clap::Parser, Debug)]
+struct CustomOptions {
+    #[clap(long)]
+    cloud_init: Option<PathBuf>,
+
+    #[clap(long)]
+    ignition: Option<PathBuf>,
 }
 
 /// Returns `true` if a cloud-init config should be passed to the VM.
