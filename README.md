@@ -149,8 +149,8 @@ username.
 
 ## Passing block devices through to the VM
 
-It is possible to pass block devices through to the VM using podman-run's
-`--device` flag:
+If cloud-init is available, it is possible to pass block devices through to the
+VM at a specific path using podman-run's `--device` flag:
 
 ```console
 $ podman run \
