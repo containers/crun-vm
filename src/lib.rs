@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-mod create;
-mod exec;
+mod commands;
+mod crun;
 mod util;
 
 use std::error::Error;
@@ -9,8 +9,7 @@ use std::ffi::OsStr;
 use std::iter;
 
 use clap::Parser;
-
-use crate::util::crun;
+use crun::crun;
 
 // Adapted from https://github.com/containers/youki/blob/main/crates/youki/src/main.rs
 #[derive(Parser, Debug)]
@@ -48,12 +47,12 @@ where
     match parsed_args.command {
         Command::Standard(cmd) => {
             if let liboci_cli::StandardCmd::Create(create_args) = *cmd {
-                return create::create(&parsed_args.global, &create_args);
+                return commands::create::create(&parsed_args.global, &create_args);
             }
         }
         Command::Common(cmd) => {
             if let liboci_cli::CommonCmd::Exec(mut exec_args) = *cmd {
-                return exec::exec(&parsed_args.global, &mut exec_args);
+                return commands::exec::exec(&parsed_args.global, &mut exec_args);
             }
         }
     }

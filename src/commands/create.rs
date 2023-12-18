@@ -10,10 +10,8 @@ use std::process::Command;
 use sysinfo::SystemExt;
 use xml::writer::XmlEvent;
 
-use crate::util::{
-    create_overlay_image, crun, find_single_file_in_directories, generate_cloud_init_iso,
-    get_image_info,
-};
+use crate::crun::crun_create;
+use crate::util::{create_overlay_vm_image, find_single_file_in_dirs, VmImageInfo};
 
 pub fn create(
     global_args: &liboci_cli::GlobalOpts,
@@ -35,23 +33,23 @@ pub fn create(
         .as_ref()
         .expect("config.json includes configuration for the container's root filesystem");
 
-    let vm_image_path = find_single_file_in_directories([root.path(), &root.path().join("disk")])?;
-    let vm_image_info = get_image_info(&vm_image_path)?;
+    let vm_image_path = find_single_file_in_dirs([root.path(), &root.path().join("disk")])?;
+    let vm_image_info = VmImageInfo::of(&vm_image_path)?;
 
     // prepare root filesystem for runner container
 
     let runner_root_path = args.bundle.join("crun-qemu-runner-root");
     fs::create_dir_all(runner_root_path.join("crun-qemu"))?;
 
-    const ENTRYPOINT_BYTES: &[u8] = include_bytes!("runner.sh");
-    let entrypoint_path = runner_root_path.join("crun-qemu/runner.sh");
+    const ENTRYPOINT_BYTES: &[u8] = include_bytes!("entrypoint.sh");
+    let entrypoint_path = runner_root_path.join("crun-qemu/entrypoint.sh");
     fs::write(&entrypoint_path, ENTRYPOINT_BYTES)?;
     fs::set_permissions(&entrypoint_path, Permissions::from_mode(0o555))?;
 
     // create overlay image
 
     let overlay_image_path = runner_root_path.join("crun-qemu/image-overlay.qcow2");
-    create_overlay_image(overlay_image_path, "/crun-qemu/image", &vm_image_info)?;
+    create_overlay_vm_image(overlay_image_path, "/crun-qemu/image", &vm_image_info)?;
 
     // adjust config for runner container
 
@@ -66,7 +64,7 @@ pub fn create(
         let mut process = spec.process().clone().expect("process config");
         process.set_cwd(".".into());
         process.set_command_line(None);
-        process.set_args(Some(vec!["/crun-qemu/runner.sh".to_string()]));
+        process.set_args(Some(vec!["/crun-qemu/entrypoint.sh".to_string()]));
         Some(process)
     });
 
@@ -214,7 +212,7 @@ pub fn create(
 
     // create cloud-init config
 
-    let needs_cloud_init = generate_cloud_init_iso(
+    let needs_cloud_init = gen_cloud_init_iso(
         cloudinit_config,
         &runner_root_path,
         block_devices.iter().map(|d| &d.target),
@@ -238,6 +236,174 @@ pub fn create(
     crun_create(global_args, args)?;
 
     Ok(())
+}
+
+/// Returns `true` if a cloud-init config should be passed to the VM.
+fn gen_cloud_init_iso(
+    source_config_path: Option<impl AsRef<Path>>,
+    runner_root: impl AsRef<Path>,
+    block_device_targets: impl IntoIterator<Item = impl AsRef<Path>>,
+    virtiofs_mounts: impl IntoIterator<Item = impl AsRef<str>>,
+    container_pub_key: &str,
+) -> Result<bool, Box<dyn Error>> {
+    let virtiofs_mounts: Vec<_> = virtiofs_mounts.into_iter().collect();
+
+    if source_config_path.is_none() && virtiofs_mounts.is_empty() {
+        // user didn't specify a cloud-init config and we have nothing to add
+        return Ok(false);
+    }
+
+    let config_path = runner_root.as_ref().join("crun-qemu/cloud-init");
+    fs::create_dir_all(&config_path)?;
+
+    // create copy of config
+
+    for file in ["meta-data", "user-data", "vendor-data"] {
+        let path = config_path.join(file);
+
+        if let Some(source_config_path) = &source_config_path {
+            let source_path = source_config_path.as_ref().join(file);
+            if source_path.exists() {
+                if !source_path.symlink_metadata()?.is_file() {
+                    return Err(io::Error::other(format!(
+                        "cloud-init: expected {file} to be a regular file"
+                    ))
+                    .into());
+                }
+                fs::copy(source_path, &path)?;
+                continue;
+            }
+        }
+
+        let mut f = File::create(path)?;
+        if file == "user-data" {
+            f.write_all(b"#cloud-config\n")?;
+        }
+    }
+
+    // adjust user-data config
+
+    let user_data_path = config_path.join("user-data");
+    let user_data = fs::read_to_string(&user_data_path)?;
+
+    if let Some(line) = user_data.lines().next() {
+        if line.trim() != "#cloud-config" {
+            return Err(io::Error::other(
+                "cloud-init: expected shebang '#cloud-config' in user-data file",
+            )
+            .into());
+        }
+    }
+
+    let mut user_data: serde_yaml::Value = serde_yaml::from_str(&user_data)
+        .map_err(|e| io::Error::other(format!("cloud-init: invalid user-data file: {e}")))?;
+
+    if let serde_yaml::Value::Null = &user_data {
+        user_data = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+    }
+
+    let user_data_mapping = match &mut user_data {
+        serde_yaml::Value::Mapping(m) => m,
+        _ => return Err(io::Error::other("cloud-init: invalid user-data file").into()),
+    };
+
+    // adjust mounts
+
+    if !user_data_mapping.contains_key("mounts") {
+        user_data_mapping.insert("mounts".into(), serde_yaml::Value::Sequence(vec![]));
+    }
+
+    let mounts = match user_data_mapping.get_mut("mounts").unwrap() {
+        serde_yaml::Value::Sequence(mounts) => mounts,
+        _ => return Err(io::Error::other("cloud-init: invalid user-data file").into()),
+    };
+
+    for mount in virtiofs_mounts {
+        let mount = mount.as_ref();
+        mounts.push(vec![mount, mount, "virtiofs", "defaults", "0", "0"].into());
+    }
+
+    // adjust authorized keys
+
+    if !user_data_mapping.contains_key("ssh_authorized_keys") {
+        user_data_mapping.insert(
+            "ssh_authorized_keys".into(),
+            serde_yaml::Value::Sequence(vec![]),
+        );
+    }
+
+    let ssh_authorized_keys = match user_data_mapping.get_mut("ssh_authorized_keys").unwrap() {
+        serde_yaml::Value::Sequence(keys) => keys,
+        _ => return Err(io::Error::other("cloud-init: invalid user-data file").into()),
+    };
+
+    ssh_authorized_keys.push(container_pub_key.into());
+
+    // create block device symlinks
+
+    if !user_data_mapping.contains_key("runcmd") {
+        user_data_mapping.insert("runcmd".into(), serde_yaml::Value::Sequence(vec![]));
+    }
+
+    let runcmd = match user_data_mapping.get_mut("runcmd").unwrap() {
+        serde_yaml::Value::Sequence(cmds) => cmds,
+        _ => return Err(io::Error::other("cloud-init: invalid user-data file").into()),
+    };
+
+    for (i, target) in block_device_targets.into_iter().enumerate() {
+        let target: &Path = target.as_ref();
+        let parent = match target.parent() {
+            Some(path) if path.to_str() != Some("") => Some(path),
+            _ => None,
+        };
+
+        if let Some(parent) = parent {
+            runcmd.push(serde_yaml::Value::Sequence(vec![
+                "mkdir".into(),
+                "-p".into(),
+                parent.to_str().expect("path is utf-8").into(),
+            ]));
+        }
+
+        runcmd.push(serde_yaml::Value::Sequence(vec![
+            "ln".into(),
+            "--symbolic".into(),
+            format!("/dev/disk/by-id/virtio-crun-qemu-bdev-{i}").into(),
+            target.to_str().expect("path is utf-8").into(),
+        ]));
+    }
+
+    // generate iso
+
+    {
+        let mut f = File::create(user_data_path)?;
+        f.write_all(b"#cloud-config\n")?;
+        serde_yaml::to_writer(&mut f, &user_data)?;
+    }
+
+    let status = Command::new("genisoimage")
+        .arg("-output")
+        .arg(
+            runner_root
+                .as_ref()
+                .join("crun-qemu/cloud-init/cloud-init.iso"),
+        )
+        .arg("-volid")
+        .arg("cidata")
+        .arg("-joliet")
+        .arg("-rock")
+        .arg("-quiet")
+        .arg(config_path.join("meta-data"))
+        .arg(config_path.join("user-data"))
+        .arg(config_path.join("vendor-data"))
+        .spawn()?
+        .wait()?;
+
+    if !status.success() {
+        return Err(io::Error::other("genisoimage failed").into());
+    }
+
+    Ok(true)
 }
 
 struct BlockDevice {
@@ -332,7 +498,7 @@ fn write_domain_xml(
         Ok(())
     }
 
-    // section w/ text
+    // section w/ text value
     fn st(
         w: &mut xml::EventWriter<File>,
         name: &str,
@@ -460,66 +626,4 @@ fn write_domain_xml(
     w.inner_mut().write_all(&[b'\n'])?;
 
     Ok(())
-}
-
-fn crun_create(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Create) -> io::Result<()> {
-    // build crun argument list
-
-    let mut arg_list = Vec::new();
-
-    if global_args.debug {
-        arg_list.push("--debug");
-    }
-
-    if let Some(path) = &global_args.log {
-        arg_list.push("--log");
-        arg_list.push(path.to_str().expect("path is utf-8"));
-    }
-
-    if let Some(format) = &global_args.log_format {
-        arg_list.push("--log-format");
-        arg_list.push(format);
-    }
-
-    if args.no_pivot {
-        arg_list.push("--no-pivot");
-    }
-
-    if let Some(path) = &global_args.root {
-        arg_list.push("--root");
-        arg_list.push(path.to_str().expect("path is utf-8"));
-    }
-
-    if global_args.systemd_cgroup {
-        arg_list.push("--systemd-cgroup");
-    }
-
-    arg_list.push("create");
-
-    arg_list.push("--bundle");
-    arg_list.push(args.bundle.to_str().expect("path is utf-8"));
-
-    if let Some(path) = &args.console_socket {
-        arg_list.push("--console-socket");
-        arg_list.push(path.to_str().expect("path is utf-8"));
-    }
-
-    if args.no_new_keyring {
-        arg_list.push("--no-new-keyring");
-    }
-
-    arg_list.push("--preserve-fds");
-    let preserve_fds = args.preserve_fds.to_string();
-    arg_list.push(&preserve_fds);
-
-    if let Some(path) = &args.pid_file {
-        arg_list.push("--pid-file");
-        arg_list.push(path.to_str().expect("path is utf-8"));
-    }
-
-    arg_list.push(&args.container_id);
-
-    // run crun
-
-    crun(arg_list)
 }

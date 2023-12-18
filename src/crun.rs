@@ -1,52 +1,95 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use std::error::Error;
-use std::fs::File;
+use std::ffi::OsStr;
 use std::io;
+use std::process::Command;
 
-use crate::util::crun;
+/// Run `crun`.
+///
+/// `crun` will inherit this process' standard streams.
+///
+/// TODO: It may be better to use libcrun directly, although its public API purportedly isn't in
+/// great shape: https://github.com/containers/crun/issues/1018
+pub fn crun<I, S>(args: I) -> io::Result<()>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let status = Command::new("crun").args(args).spawn()?.wait()?;
 
-pub fn exec(
-    global_args: &liboci_cli::GlobalOpts,
-    args: &mut liboci_cli::Exec,
-) -> Result<(), Box<dyn Error>> {
-    assert!(args.command.is_empty());
-
-    let process_config_path = args.process.as_ref().expect("process config");
-    let mut process: oci_spec::runtime::Process =
-        serde_json::from_reader(File::open(process_config_path)?)?;
-
-    let command = process.args().as_ref().expect("command specified");
-
-    let ssh_user = command
-        .first()
-        .expect("first command argument is user to ssh as into the vm");
-
-    let mut new_command = vec![];
-    if ssh_user != "-" {
-        new_command.extend([
-            "ssh".to_string(),
-            "-o".to_string(),
-            "LogLevel=ERROR".to_string(),
-            "-o".to_string(),
-            "StrictHostKeyChecking=no".to_string(),
-            "-l".to_string(),
-            ssh_user.clone(),
-            "localhost".to_string(),
-        ]);
+    if status.success() {
+        Ok(())
+    } else {
+        Err(io::Error::other("crun failed"))
     }
-    new_command.extend(command.iter().skip(1).cloned());
-
-    process.set_args(Some(new_command));
-
-    serde_json::to_writer(File::create(process_config_path)?, &process)?;
-
-    crun_exec(global_args, args)?;
-
-    Ok(())
 }
 
-fn crun_exec(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Exec) -> io::Result<()> {
+pub fn crun_create(
+    global_args: &liboci_cli::GlobalOpts,
+    args: &liboci_cli::Create,
+) -> io::Result<()> {
+    // build crun argument list
+
+    let mut arg_list = Vec::new();
+
+    if global_args.debug {
+        arg_list.push("--debug");
+    }
+
+    if let Some(path) = &global_args.log {
+        arg_list.push("--log");
+        arg_list.push(path.to_str().expect("path is utf-8"));
+    }
+
+    if let Some(format) = &global_args.log_format {
+        arg_list.push("--log-format");
+        arg_list.push(format);
+    }
+
+    if args.no_pivot {
+        arg_list.push("--no-pivot");
+    }
+
+    if let Some(path) = &global_args.root {
+        arg_list.push("--root");
+        arg_list.push(path.to_str().expect("path is utf-8"));
+    }
+
+    if global_args.systemd_cgroup {
+        arg_list.push("--systemd-cgroup");
+    }
+
+    arg_list.push("create");
+
+    arg_list.push("--bundle");
+    arg_list.push(args.bundle.to_str().expect("path is utf-8"));
+
+    if let Some(path) = &args.console_socket {
+        arg_list.push("--console-socket");
+        arg_list.push(path.to_str().expect("path is utf-8"));
+    }
+
+    if args.no_new_keyring {
+        arg_list.push("--no-new-keyring");
+    }
+
+    arg_list.push("--preserve-fds");
+    let preserve_fds = args.preserve_fds.to_string();
+    arg_list.push(&preserve_fds);
+
+    if let Some(path) = &args.pid_file {
+        arg_list.push("--pid-file");
+        arg_list.push(path.to_str().expect("path is utf-8"));
+    }
+
+    arg_list.push(&args.container_id);
+
+    // run crun
+
+    crun(arg_list)
+}
+
+pub fn crun_exec(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Exec) -> io::Result<()> {
     // build crun argument list
 
     let mut arg_list = Vec::<String>::new();
