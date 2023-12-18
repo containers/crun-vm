@@ -26,20 +26,16 @@ echo 'cgroup_controllers = []' >> /etc/libvirt/qemu.conf
 virtlogd --daemon
 virtqemud --daemon
 
-# pass bind mounts through to the VM using virtiofs
+# libvirt doesn't let us pass --modcaps=-mknod to virtiofsd (which is necessary
+# since we ourselves don't have that capability and virtiofsd would fail trying
+# to add it), so we tell libvirt to use the /crun-qemu/virtiofsd script below
 
-mkdir -p /crun-qemu/mounts/virtiofsd
+cat <<'EOF' >/crun-qemu/virtiofsd
+#!/bin/bash
+/usr/libexec/virtiofsd --modcaps=-mknod "$@"
+EOF
 
-mapfile -t mount_ids < <( find /crun-qemu/mounts -name '*[0-9]' -printf '%f\n' )
-for i in "${mount_ids[@]}"; do
-    /usr/libexec/virtiofsd \
-        --modcaps=-mknod \
-        --shared-dir "/crun-qemu/mounts/$i" \
-        --socket-path "/crun-qemu/mounts/virtiofsd/$i" \
-        --sandbox chroot \
-        &>"/crun-qemu/mounts/virtiofsd/$i.log" \
-        &
-done
+chmod +x /crun-qemu/virtiofsd
 
 # launch VM
 

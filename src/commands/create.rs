@@ -140,10 +140,10 @@ pub fn create(
                     && !m.destination().starts_with("/dev/")
                     && !ignore_mounts.contains(&m.destination().to_string_lossy().as_ref())
                 {
-                    let socket = format!("/crun-qemu/mounts/virtiofsd/{}", i);
+                    let source = format!("/crun-qemu/mounts/{}", i);
                     let target = m.destination().to_str().unwrap().to_string();
-                    m.set_destination(Path::new("/crun-qemu/mounts").join(i.to_string()));
-                    virtiofs_mounts.push(VirtiofsMount { socket, target });
+                    m.set_destination(PathBuf::from(&source));
+                    virtiofs_mounts.push(VirtiofsMount { source, target });
                 }
             }
         }
@@ -412,7 +412,7 @@ struct BlockDevice {
 }
 
 struct VirtiofsMount {
-    socket: String,
+    source: String,
     target: String,
 }
 
@@ -610,8 +610,11 @@ fn write_domain_xml(
 
             for mount in virtiofs_mounts {
                 s(w, "filesystem", &[("type", "mount")], |w| {
-                    se(w, "driver", &[("type", "virtiofs"), ("queue", "1024")])?;
-                    se(w, "source", &[("socket", &mount.socket)])?;
+                    se(w, "driver", &[("type", "virtiofs")])?;
+                    s(w, "binary", &[("path", "/crun-qemu/virtiofsd")], |w| {
+                        se(w, "sandbox", &[("mode", "chroot")])
+                    })?;
+                    se(w, "source", &[("dir", &mount.source)])?;
                     se(w, "target", &[("dir", &mount.target)])?;
                     Ok(())
                 })?;
