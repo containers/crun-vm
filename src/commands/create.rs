@@ -4,7 +4,7 @@ use std::error::Error;
 use std::fs::{self, File, Permissions};
 use std::io::{self, Write};
 use std::iter;
-use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
+use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -96,7 +96,7 @@ pub fn create(
         let mut linux = spec.linux().clone().expect("linux config");
 
         linux.set_devices({
-            let mut devices = linux.devices().clone().unwrap_or_default();
+            let devices = linux.devices().clone().unwrap_or_default();
 
             block_devices = devices
                 .iter()
@@ -106,16 +106,6 @@ pub fn create(
                     target: d.path().to_path_buf(),
                 })
                 .collect();
-
-            let kvm_major_minor = fs::metadata("/dev/kvm")?.rdev();
-            devices.push(
-                oci_spec::runtime::LinuxDeviceBuilder::default()
-                    .typ(oci_spec::runtime::LinuxDeviceType::C)
-                    .path("/dev/kvm")
-                    .major(i64::try_from(kvm_major_minor >> 8).unwrap())
-                    .minor(i64::try_from(kvm_major_minor & 0xff).unwrap())
-                    .build()?,
-            );
 
             Some(devices)
         });
@@ -170,6 +160,7 @@ pub fn create(
 
         for path in [
             "/bin",
+            "/dev/kvm",
             "/dev/log",
             "/dev/vfio",
             "/etc/pam.d",
