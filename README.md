@@ -76,8 +76,8 @@ in a container image.
 
 In the examples above, you were able to boot the VM but not to login. To fix
 this and do other first-boot customization, you can provide a [cloud-init]
-NoCloud configuration to the VM by configuring a bind mount with the special
-destination `/cloud-init`:
+NoCloud configuration to the VM by passing in the non-standard option
+`--cloud-init` *after* the image specification:
 
 ```console
 $ ls examples/cloud-init/config/
@@ -96,8 +96,8 @@ You should now be able to login with the default `fedora` username and password
 
 ### Ignition
 
-Similarly, you can provide an [Ignition] configuration to the VM by configuring
-a bind mount with the special destination `/ignition`:
+Similarly, you can provide an [Ignition] configuration to the VM by passing in
+the `--ignition` option:
 
 ```console
 $ podman run \
