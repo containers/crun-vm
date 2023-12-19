@@ -50,7 +50,7 @@ podman-run, in which case you won't be able to interact with the VM but can
 still observe its console. Note that pressing `ctrl-]` will have no effect, so
 use `podman container rm --force --time=0 ...` to terminate the VM instead.
 
-## From VM image files packaged into container images
+### From VM image files packaged into container images
 
 This runtime also works with container images that contain a VM image file with
 any name under `/` or under `/disk/`. No other files may exist in those
