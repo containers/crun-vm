@@ -270,11 +270,6 @@ fn gen_cloud_init_iso(
 ) -> Result<bool, Box<dyn Error>> {
     let virtiofs_mounts: Vec<_> = virtiofs_mounts.into_iter().collect();
 
-    if source_config_path.is_none() && virtiofs_mounts.is_empty() {
-        // user didn't specify a cloud-init config and we have nothing to add
-        return Ok(false);
-    }
-
     let config_path = runner_root.as_ref().join("crun-qemu/cloud-init");
     fs::create_dir_all(&config_path)?;
 
