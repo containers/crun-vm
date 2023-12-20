@@ -14,6 +14,11 @@ features = ["cargo", "derive", "std"]
 version = "0.3.0"
 default-features = false
 
+[dependencies.nix]
+version = "0.27.0"
+default-features = false
+features = ["fs"]
+
 [dependencies.num_cpus]
 version = "1.16"
 default-features = false

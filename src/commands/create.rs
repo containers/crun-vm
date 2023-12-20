@@ -4,16 +4,17 @@ use std::error::Error;
 use std::fs::{self, File, Permissions};
 use std::io::{self, Write};
 use std::iter;
-use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use clap::Parser;
+use nix::sys::stat::{major, makedev, minor, mknod, Mode, SFlag};
 use sysinfo::SystemExt;
 use xml::writer::XmlEvent;
 
 use crate::crun::crun_create;
-use crate::util::{create_overlay_vm_image, find_single_file_in_dirs, VmImageInfo};
+use crate::util::{create_overlay_vm_image, find_single_file_in_dirs, SpecExt, VmImageInfo};
 
 pub fn create(
     global_args: &liboci_cli::GlobalOpts,
@@ -98,12 +99,24 @@ pub fn create(
         linux.set_devices({
             let devices = linux.devices().clone().unwrap_or_default();
 
+            fs::create_dir_all(runner_root_path.join("crun-qemu/bdevs/majorminor"))?;
+
             block_devices = devices
                 .iter()
                 .filter(|d| d.typ() == oci_spec::runtime::LinuxDeviceType::B)
-                .map(|d| BlockDevice {
-                    source: format!("/dev/block/{}:{}", d.major(), d.minor()),
-                    target: d.path().to_path_buf(),
+                .map(|d| {
+                    let source = format!("crun-qemu/bdevs/majorminor/{}:{}", d.major(), d.minor());
+                    let target = d.path().to_path_buf();
+
+                    mknod(
+                        &runner_root_path.join(&source),
+                        SFlag::S_IFBLK,
+                        Mode::from_bits_retain(d.file_mode().unwrap()),
+                        makedev(d.major().try_into().unwrap(), d.minor().try_into().unwrap()),
+                    )
+                    .unwrap();
+
+                    BlockDevice { source, target }
                 })
                 .collect();
 
@@ -116,7 +129,7 @@ pub fn create(
     let mut virtiofs_mounts: Vec<VirtiofsMount> = Vec::new();
     let pub_key: String;
 
-    spec.set_mounts({
+    let new_mounts = {
         let mut mounts = spec.mounts().clone().unwrap_or_default();
 
         let ignore_mounts = [
@@ -140,19 +153,34 @@ pub fn create(
                 let meta = path.metadata()?;
 
                 if meta.file_type().is_block_device() {
-                    let new_dest = format!("/crun-qemu/bdevs/{}", i);
-                    block_devices.push(BlockDevice {
-                        source: new_dest.clone(),
-                        target: m.destination().to_path_buf(),
-                    });
-                    m.set_destination(PathBuf::from(new_dest));
+                    // With Docker and rootful Podman, for devices that are passed in as bind
+                    // mounts, we must add them under .linux.resources.devices for the container to
+                    // actually be able to access them.
+                    spec.linux_resources_devices_push(
+                        oci_spec::runtime::LinuxDeviceCgroupBuilder::default()
+                            .allow(true)
+                            .typ(oci_spec::runtime::LinuxDeviceType::B)
+                            .major(i64::try_from(major(meta.rdev()))?)
+                            .minor(i64::try_from(minor(meta.rdev()))?)
+                            .access("rwm")
+                            .build()?,
+                    );
+
+                    let source = format!("/crun-qemu/bdevs/mounts/{}", i);
+                    let target = m.destination().to_path_buf();
+
+                    m.set_destination(PathBuf::from(&source));
+
+                    block_devices.push(BlockDevice { source, target });
                 } else if meta.file_type().is_dir()
                     && !m.destination().starts_with("/dev/")
                     && !ignore_mounts.contains(&m.destination().to_string_lossy().as_ref())
                 {
                     let source = format!("/crun-qemu/mounts/{}", i);
                     let target = m.destination().to_str().unwrap().to_string();
+
                     m.set_destination(PathBuf::from(&source));
+
                     virtiofs_mounts.push(VirtiofsMount { source, target });
                 }
             }
@@ -176,6 +204,32 @@ pub fn create(
                     .options(["bind".to_string(), "rprivate".to_string(), "ro".to_string()])
                     .build()?,
             );
+        }
+
+        fn make_char_dev_accessible(
+            spec: &mut oci_spec::runtime::Spec,
+            path: impl AsRef<Path>,
+        ) -> Result<(), Box<dyn Error>> {
+            let meta = fs::metadata(path)?;
+            spec.linux_resources_devices_push(
+                oci_spec::runtime::LinuxDeviceCgroupBuilder::default()
+                    .allow(true)
+                    .typ(oci_spec::runtime::LinuxDeviceType::C)
+                    .major(i64::try_from(major(meta.rdev()))?)
+                    .minor(i64::try_from(minor(meta.rdev()))?)
+                    .access("rwm")
+                    .build()?,
+            );
+            Ok(())
+        }
+
+        make_char_dev_accessible(&mut spec, "/dev/kvm")?;
+
+        for entry in fs::read_dir("/dev/vfio")? {
+            let path = entry?;
+            if path.metadata()?.file_type().is_char_device() {
+                make_char_dev_accessible(&mut spec, path.path())?;
+            }
         }
 
         fs::create_dir_all(runner_root_path.join("etc"))?;
@@ -206,7 +260,8 @@ pub fn create(
         );
 
         Some(mounts)
-    });
+    };
+    spec.set_mounts(new_mounts);
 
     spec.save(&config_path)?;
 

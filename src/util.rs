@@ -6,6 +6,34 @@ use std::process::{Command, Stdio};
 
 use serde::Deserialize;
 
+pub trait SpecExt {
+    fn linux_resources_devices_push(
+        &mut self,
+        linux_device_cgroup: oci_spec::runtime::LinuxDeviceCgroup,
+    );
+}
+
+impl SpecExt for oci_spec::runtime::Spec {
+    fn linux_resources_devices_push(
+        &mut self,
+        linux_device_cgroup: oci_spec::runtime::LinuxDeviceCgroup,
+    ) {
+        self.set_linux({
+            let mut linux = self.linux().clone().expect("linux config");
+            linux.set_resources({
+                let mut resources = linux.resources().clone().unwrap_or_default();
+                resources.set_devices({
+                    let mut devices = resources.devices().clone().unwrap_or_default();
+                    devices.push(linux_device_cgroup);
+                    Some(devices)
+                });
+                Some(resources)
+            });
+            Some(linux)
+        });
+    }
+}
+
 pub fn find_single_file_in_dirs<I, P>(dir_paths: I) -> io::Result<PathBuf>
 where
     I: IntoIterator<Item = P>,
