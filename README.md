@@ -11,9 +11,13 @@ $ dnf install bash coreutils crun genisoimage libvirt-client libvirt-daemon-driv
 $ cargo build
 ```
 
-## Booting VMs
+## Overview
 
-### From regular VM image files
+Below we overview some of the major features provided by `crun-qemu`.
+
+### Booting VMs
+
+#### From regular VM image files
 
 First, obtain a QEMU-compatible VM image and place it in a directory by itself:
 
@@ -50,7 +54,7 @@ podman-run, in which case you won't be able to interact with the VM but can
 still observe its console. Note that pressing `ctrl-]` will have no effect, so
 use `podman container rm --force --time=0 ...` to terminate the VM instead.
 
-### From VM image files packaged into container images
+#### From VM image files packaged into container images
 
 This runtime also works with container images that contain a VM image file with
 any name under `/` or under `/disk/`. No other files may exist in those
@@ -70,9 +74,9 @@ You can also use `util/package-vm-image.sh` to easily package a VM image into a
 container image, and `util/extract-vm-image.sh` to extract a VM image contained
 in a container image.
 
-## First-boot customization
+### First-boot customization
 
-### cloud-init
+#### cloud-init
 
 In the examples above, you were able to boot the VM but not to login. To fix
 this and do other first-boot customization, you can provide a [cloud-init]
@@ -94,7 +98,7 @@ $ podman run \
 You should now be able to login with the default `fedora` username and password
 `pass`.
 
-### Ignition
+#### Ignition
 
 Similarly, you can provide an [Ignition] configuration to the VM by passing in
 the `--ignition` option:
@@ -111,7 +115,7 @@ $ podman run \
 You should now be able to login with the default `core` username and password
 `pass`.
 
-## SSH'ing into the VM
+### SSH'ing into the VM
 
 Assuming the VM supports cloud-init and runs an SSH server, you can `ssh` into
 it using podman-exec as whatever user cloud-init considers to be the default for
@@ -143,9 +147,9 @@ If you actually just want to exec into the container in which the VM is running
 (probably to debug some problem with `crun-qemu` itself), pass in `-` as the
 username.
 
-## Passing things through to the VM
+### Passing things through to the VM
 
-### Directory bind mounts
+#### Directory bind mounts
 
 Bind mounts are passed through to the VM as [virtiofs] file systems:
 
@@ -167,7 +171,7 @@ manually with:
 mount -t virtiofs /home/fedora/util /home/fedora/util
 ```
 
-### Block devices
+#### Block devices
 
 If cloud-init is available, it is possible to pass block devices through to the
 VM at a specific path using podman-run's `--device` flag (this example assumes
@@ -186,7 +190,7 @@ $ podman run \
 You can also pass them in as bind mounts using the `-v`/`--volume` or `--mount`
 flags.
 
-### Mediated (mdev) vfio-pci devices
+#### Mediated (mdev) vfio-pci devices
 
 Mediated vfio-pci devices (such as vGPUs) can be passed through to the VM by
 specifying the non-standard `--vfio-pci-mdev` option with a path to the mdev's
