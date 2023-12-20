@@ -1,8 +1,8 @@
 # The `crun-qemu` OCI runtime
 
-This is an **experimental** [OCI Runtime] that enables [Podman]/[Docker] to run
-VM images. The objective is to make running VMs (in simple configurations) as
-easy as running containers.
+This is an **experimental** [OCI Runtime] that enables [Podman] and [Docker] to
+run VM images. The objective is to make running VMs (in simple configurations)
+as easy as running containers.
 
 ## Installing
 
