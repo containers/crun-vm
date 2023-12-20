@@ -4,12 +4,50 @@ This is an **experimental** [OCI Runtime] that enables Podman to run VM images.
 The objective is to make running VMs (in simple configurations) as easy as
 running containers.
 
-## Building the runtime
+## Installing
 
-```console
-$ dnf install bash coreutils crun genisoimage libvirt-client libvirt-daemon-driver-qemu libvirt-daemon-log qemu-img shadow-utils util-linux virtiofsd
-$ cargo build
-```
+### Build and install from source (on Fedora)
+
+1. First install the runtime dependencies:
+
+   ```console
+   $ dnf install bash coreutils crun genisoimage libvirt-client libvirt-daemon-driver-qemu libvirt-daemon-log qemu-img qemu-system-x86-core shadow-utils util-linux virtiofsd
+   ```
+
+2. Install Rust and Cargo if you don't already have Rust tooling available:
+
+   ```console
+   $ dnf install cargo
+   ```
+
+3. Build `crun-qemu`:
+
+   ```console
+   $ cargo build
+   ```
+
+4. Copy the `target/debug/crun-qemu` executable to wherever you prefer, for
+   instance `/usr/local/bin/`:
+
+   ```console
+   $ cp target/debug/crun-qemu /usr/local/bin/
+   ```
+
+5. Merge the following configuration into the /etc/containers/containers.conf
+   file, creating it if it doesn't exist (adjust the path according to where you
+   copied `crun-qemu` to):
+
+   ```toml
+   [engine.runtimes]
+   crun-qemu = ["/usr/local/bin/crun-qemu"]
+   ```
+
+Note that the examples below and elsewhere in this repo don't need `crun-qemu`
+to be installed: it suffices to complete steps 1–3.
+
+If you did install `crun-qemu` and ajusted `/etc/containers/containers.conf`
+accordingly, you can optionally replace `--runtime
+"$PWD"/target/debug/crun-qemu` with `--runtime crun-qemu` in the examples.
 
 ## Overview
 
