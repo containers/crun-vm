@@ -308,18 +308,20 @@ pub fn create(
     };
     spec.set_mounts(new_mounts);
 
-    // Docker's default seccomp profile blocks some systems calls that passt requires, so we just
-    // adjust the profile to allow them.
-    //
-    // TODO: This doesn't seem reasonable at all. Should we just force users to use a different
-    // seccomp profile? Should passt provide the option to bypass a lot of the isolation that it
-    // does, given we're already in a container *and* under a seccomp profile?
-    spec.linux_seccomp_syscalls_push(
-        oci_spec::runtime::LinuxSyscallBuilder::default()
-            .names(["mount", "pivot_root", "umount2", "unshare"].map(String::from))
-            .action(oci_spec::runtime::LinuxSeccompAction::ScmpActAllow)
-            .build()?,
-    );
+    if is_docker {
+        // Docker's default seccomp profile blocks some systems calls that passt requires, so we just
+        // adjust the profile to allow them.
+        //
+        // TODO: This doesn't seem reasonable at all. Should we just force users to use a different
+        // seccomp profile? Should passt provide the option to bypass a lot of the isolation that it
+        // does, given we're already in a container *and* under a seccomp profile?
+        spec.linux_seccomp_syscalls_push(
+            oci_spec::runtime::LinuxSyscallBuilder::default()
+                .names(["mount", "pivot_root", "umount2", "unshare"].map(String::from))
+                .action(oci_spec::runtime::LinuxSeccompAction::ScmpActAllow)
+                .build()?,
+        );
+    }
 
     spec.save(&config_path)?;
 
