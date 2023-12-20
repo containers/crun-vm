@@ -232,6 +232,21 @@ pub fn create(
             }
         }
 
+        fs::create_dir_all(runner_root_path.join("crun-qemu/passt"))?;
+        fs::copy(
+            "/usr/bin/passt",
+            runner_root_path.join("crun-qemu/passt/passt"),
+        )?;
+        File::create(runner_root_path.join("crun-qemu/passt/wrapper"))?;
+        mounts.push(
+            oci_spec::runtime::MountBuilder::default()
+                .typ("bind")
+                .source(runner_root_path.join("crun-qemu/passt/wrapper"))
+                .destination("usr/bin/passt")
+                .options(["bind".to_string(), "rprivate".to_string()])
+                .build()?,
+        );
+
         fs::create_dir_all(runner_root_path.join("etc"))?;
         fs::copy("/etc/passwd", runner_root_path.join("etc/passwd"))?;
         fs::copy("/etc/group", runner_root_path.join("etc/group"))?;
