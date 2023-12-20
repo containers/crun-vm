@@ -113,19 +113,31 @@ You should now be able to login with the default `core` username and password
 
 ## SSH'ing into the VM
 
-Assuming the VM supports cloud-init and runs an SSH server, you can SSH into it
-using podman-exec as whatever user cloud-init considers to be the default for
+Assuming the VM supports cloud-init and runs an SSH server, you can `ssh` into
+it using podman-exec as whatever user cloud-init considers to be the default for
 your VM image:
 
 ```console
-$ podman exec --latest fedora
+$ podman run \
+    --runtime "$PWD"/target/debug/crun-qemu \
+    --security-opt label=disable \
+    --detach --rm \
+    quay.io/containerdisks/fedora:39 \
+    ""
+47e7aab2b1a52054f5904ccb108854db23885258f1bd0d87241740212f4fc9af
+
+$ podman exec --latest fedora whoami
+fedora
+
+$ podman exec --latest -it fedora
+[fedora@ibm-p8-kvm-07-guest-07 ~]$
 ```
 
-The last argument above, which would typically be the command name, determines
-instead the name of the user to ssh into. A command can optionally be specified
-with further arguments. If no command is specified, a login shell is initiated.
-Note that in the latter case, you probably want to pass flags `-it` to
-podman-exec.
+The `fedora` argument to podman-exec above, which would typically correspond to
+the command to be executed, determines instead the name of the user to `ssh`
+into the guest as. A command can optionally be specified with further arguments.
+If no command is specified, a login shell is initiated. In this case, you
+probably also want to pass flags `-it` to podman-exec.
 
 If you actually just want to exec into the container in which the VM is running
 (probably to debug some problem with `crun-qemu` itself), pass in `-` as the
