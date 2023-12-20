@@ -36,7 +36,16 @@ pub fn create(
         .as_ref()
         .expect("config.json includes configuration for the container's root filesystem");
 
-    let vm_image_path = find_single_file_in_dirs([root.path(), &root.path().join("disk")])?;
+    let is_docker = root.path().join(".dockerenv").exists();
+
+    let vm_image_path = find_single_file_in_dirs(
+        [root.path(), &root.path().join("disk")],
+        &[
+            // docker can add these files to the root of the container file system
+            &root.path().join(".dockerinit"),
+            &root.path().join(".dockerenv"),
+        ],
+    )?;
     let vm_image_info = VmImageInfo::of(&vm_image_path)?;
 
     // prepare root filesystem for runner container
@@ -80,6 +89,27 @@ pub fn create(
                     .filter(|arg| !arg.trim().is_empty()),
             ),
         );
+
+        if is_docker {
+            // Unlike Podman, Docker doesn't run the runtime with the same working directory as the
+            // process that ran `docker`, so we require these paths to be absolute.
+            //
+            // TODO: There must be a better way...
+
+            fn any_is_relative(iter: impl IntoIterator<Item = impl AsRef<Path>>) -> bool {
+                iter.into_iter().any(|p| p.as_ref().is_relative())
+            }
+
+            if any_is_relative(&custom_options.cloud_init)
+                || any_is_relative(&custom_options.ignition)
+                || any_is_relative(&custom_options.vfio_pci_mdev)
+            {
+                return Err(Box::new(io::Error::other(concat!(
+                    "paths specified using --cloud-init, --ignition, or --vfio-pci-mdev must be",
+                    " absolute when using Docker",
+                ))));
+            }
+        }
 
         process.set_cwd(".".into());
         process.set_command_line(None);
@@ -277,6 +307,19 @@ pub fn create(
         Some(mounts)
     };
     spec.set_mounts(new_mounts);
+
+    // Docker's default seccomp profile blocks some systems calls that passt requires, so we just
+    // adjust the profile to allow them.
+    //
+    // TODO: This doesn't seem reasonable at all. Should we just force users to use a different
+    // seccomp profile? Should passt provide the option to bypass a lot of the isolation that it
+    // does, given we're already in a container *and* under a seccomp profile?
+    spec.linux_seccomp_syscalls_push(
+        oci_spec::runtime::LinuxSyscallBuilder::default()
+            .names(["mount", "pivot_root", "umount2", "unshare"].map(String::from))
+            .action(oci_spec::runtime::LinuxSeccompAction::ScmpActAllow)
+            .build()?,
+    );
 
     spec.save(&config_path)?;
 

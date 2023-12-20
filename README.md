@@ -1,8 +1,8 @@
 # The `crun-qemu` OCI runtime
 
-This is an **experimental** [OCI Runtime] that enables Podman to run VM images.
-The objective is to make running VMs (in simple configurations) as easy as
-running containers.
+This is an **experimental** [OCI Runtime] that enables [Podman]/[Docker] to run
+VM images. The objective is to make running VMs (in simple configurations) as
+easy as running containers.
 
 ## Installing
 
@@ -33,25 +33,51 @@ running containers.
    $ cp target/debug/crun-qemu /usr/local/bin/
    ```
 
-5. Merge the following configuration into the /etc/containers/containers.conf
-   file, creating it if it doesn't exist (adjust the path according to where you
-   copied `crun-qemu` to):
+5. If you're using Podman:
 
-   ```toml
-   [engine.runtimes]
-   crun-qemu = ["/usr/local/bin/crun-qemu"]
-   ```
+     - Merge the following configuration into the
+       `/etc/containers/containers.conf` file, creating it if it doesn't exist
+       (adjust the path below according to where you copied `crun-qemu` to):
 
-Note that the examples below and elsewhere in this repo don't need `crun-qemu`
-to be installed: it suffices to complete steps 1–3.
+       ```toml
+       [engine.runtimes]
+       crun-qemu = ["/usr/local/bin/crun-qemu"]
+       ```
 
-If you did install `crun-qemu` and ajusted `/etc/containers/containers.conf`
-accordingly, you can optionally replace `--runtime
-"$PWD"/target/debug/crun-qemu` with `--runtime crun-qemu` in the examples.
+   If you're using Docker:
+
+     - Merge the following configuration into the `/etc/docker/daemon.json`
+       file, creating it if it doesn't exist (adjust the path below according to
+       where you copied `crun-qemu` to):
+
+       ```json
+       {
+         "runtimes": {
+           "crun-qemu": {
+             "path": "/usr/local/bin/crun-qemu"
+           }
+         }
+       }
+       ```
+
+     - Then reload the `docker` service for the new configuration to take
+       effect:
+
+       ```console
+       $ service docker reload
+       ```
+
+When using Podman, it is possible to run the examples below and elsewhere in
+this repo without actually installing `crun-qemu`, *i.e.*, performing only steps
+1–3. In this case, you must replace `--runtime crun-qemu` with `--runtime
+"$PWD"/target/debug/crun-qemu` when running the examples.
 
 ## Overview
 
-Below we overview some of the major features provided by `crun-qemu`.
+Here we overview some of the major features provided by `crun-qemu`.
+
+The examples below use Podman, but unless otherwise stated you can use Docker
+instead without any changes to the arguments.
 
 ### Booting VMs
 
@@ -66,9 +92,12 @@ $ curl -LO --output-dir my-vm-image https://download.fedoraproject.org/pub/fedor
 
 Then try it out:
 
+> This example does not work with Docker, since docker-run does not understand
+> the `--rootfs` flag.
+
 ```console
 $ podman run \
-    --runtime "$PWD"/target/debug/crun-qemu \
+    --runtime crun-qemu \
     --security-opt label=disable \
     -it --rm \
     --rootfs my-vm-image \
@@ -101,7 +130,7 @@ convention, so you can use those here:
 
 ```console
 $ podman run \
-    --runtime "$PWD"/target/debug/crun-qemu \
+    --runtime crun-qemu \
     --security-opt label=disable \
     -it --rm \
     quay.io/containerdisks/fedora:39 \
@@ -121,12 +150,15 @@ this and do other first-boot customization, you can provide a [cloud-init]
 NoCloud configuration to the VM by passing in the non-standard option
 `--cloud-init` *after* the image specification:
 
+> For this example to work with Docker, you must provide an absolute path to
+> `--cloud-init`.
+
 ```console
 $ ls examples/cloud-init/config/
 meta-data  user-data  vendor-data
 
 $ podman run \
-    --runtime "$PWD"/target/debug/crun-qemu \
+    --runtime crun-qemu \
     --security-opt label=disable \
     -it --rm \
     quay.io/containerdisks/fedora:39 \
@@ -141,9 +173,12 @@ You should now be able to login with the default `fedora` username and password
 Similarly, you can provide an [Ignition] configuration to the VM by passing in
 the `--ignition` option:
 
+> For this example to work with Docker, you must provide an absolute path to
+> `--ignition`.
+
 ```console
 $ podman run \
-    --runtime "$PWD"/target/debug/crun-qemu \
+    --runtime crun-qemu \
     --security-opt label=disable \
     -it --rm \
     quay.io/crun-qemu/fedora-coreos:39 \
@@ -155,13 +190,16 @@ You should now be able to login with the default `core` username and password
 
 ### SSH'ing into the VM
 
-Assuming the VM supports cloud-init and runs an SSH server, you can `ssh` into
-it using podman-exec as whatever user cloud-init considers to be the default for
-your VM image:
+Assuming the VM supports cloud-init and exposes an SSH server on port 22, you
+can `ssh` into it using podman-exec as whatever user cloud-init considers to be
+the default for your VM image:
+
+> For this example to work with Docker, you must replace the `--latest` flag
+> with the container's name or ID.
 
 ```console
 $ podman run \
-    --runtime "$PWD"/target/debug/crun-qemu \
+    --runtime crun-qemu \
     --security-opt label=disable \
     --detach --rm \
     quay.io/containerdisks/fedora:39 \
@@ -171,7 +209,7 @@ $ podman run \
 $ podman exec --latest fedora whoami
 fedora
 
-$ podman exec --latest -it fedora
+$ podman exec -it --latest fedora
 [fedora@ibm-p8-kvm-07-guest-07 ~]$
 ```
 
@@ -191,9 +229,12 @@ username.
 
 Bind mounts are passed through to the VM as [virtiofs] file systems:
 
+> For this example to work with Docker, you must provide an absolute path to
+> `--cloud-init`.
+
 ```console
 $ podman run \
-    --runtime "$PWD"/target/debug/crun-qemu \
+    --runtime crun-qemu \
     --security-opt label=disable \
     -it --rm \
     -v ./util:/home/fedora/util \
@@ -215,9 +256,12 @@ If cloud-init is available, it is possible to pass block devices through to the
 VM at a specific path using podman-run's `--device` flag (this example assumes
 `/dev/ram0` to exist and to be accessible by the current user):
 
+> For this example to work with Docker, you must provide an absolute path to
+> `--cloud-init`.
+
 ```console
 $ podman run \
-    --runtime "$PWD"/target/debug/crun-qemu \
+    --runtime crun-qemu \
     --security-opt label=disable \
     -it --rm \
     --device /dev/ram0:/path/in/vm/my-disk \
@@ -234,9 +278,12 @@ Mediated vfio-pci devices (such as vGPUs) can be passed through to the VM by
 specifying the non-standard `--vfio-pci-mdev` option with a path to the mdev's
 sysfs directory:
 
+> For this example to work with Docker, you must provide an absolute path to
+> `--vfio-pci-mdev`.
+
 ```console
 $ podman run \
-    --runtime "$PWD"/target/debug/crun-qemu \
+    --runtime crun-qemu \
     --security-opt label=disable \
     -it --rm \
     quay.io/containerdisks/fedora:39 \
@@ -255,9 +302,11 @@ This project is released under the GPL 2.0 (or later) license. See
 
 [cloud-init]: https://cloud-init.io/
 [crun]: https://github.com/containers/crun
+[Docker]: https://www.docker.com/
 [KubeVirt `containerDisk`s]: https://kubevirt.io/user-guide/virtual_machines/disks_and_volumes/#containerdisk
 [libvirt]: https://libvirt.org/
 [Ignition]: https://coreos.github.io/ignition/
+[Podman]: https://podman.io/
 [OCI Runtime]: https://github.com/opencontainers/runtime-spec/blob/v1.1.0/spec.md
 [QEMU]: https://www.qemu.org/
 [virtiofs]: https://virtio-fs.gitlab.io/

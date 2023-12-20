@@ -11,6 +11,8 @@ pub trait SpecExt {
         &mut self,
         linux_device_cgroup: oci_spec::runtime::LinuxDeviceCgroup,
     );
+
+    fn linux_seccomp_syscalls_push(&mut self, linux_syscall: oci_spec::runtime::LinuxSyscall);
 }
 
 impl SpecExt for oci_spec::runtime::Spec {
@@ -32,14 +34,32 @@ impl SpecExt for oci_spec::runtime::Spec {
             Some(linux)
         });
     }
+
+    fn linux_seccomp_syscalls_push(&mut self, linux_syscall: oci_spec::runtime::LinuxSyscall) {
+        self.set_linux({
+            let mut linux = self.linux().clone().expect("linux config");
+            linux.set_seccomp({
+                let mut seccomp = linux.seccomp().clone();
+                if let Some(seccomp) = &mut seccomp {
+                    seccomp.set_syscalls({
+                        let mut syscalls = seccomp.syscalls().clone().unwrap_or_default();
+                        syscalls.push(linux_syscall);
+                        Some(syscalls)
+                    });
+                }
+                seccomp
+            });
+            Some(linux)
+        });
+    }
 }
 
-pub fn find_single_file_in_dirs<I, P>(dir_paths: I) -> io::Result<PathBuf>
+pub fn find_single_file_in_dirs<I, P>(dir_paths: I, ignore_files: &[P]) -> io::Result<PathBuf>
 where
     I: IntoIterator<Item = P>,
     P: AsRef<Path>,
 {
-    let mut candidate = None;
+    let mut candidate: Option<PathBuf> = None;
 
     for dir_path in dir_paths {
         let dir_path = dir_path.as_ref();
@@ -48,12 +68,20 @@ where
             for entry in dir_path.read_dir()? {
                 let e = entry?;
 
-                if e.file_type()?.is_file() {
-                    if candidate.is_some() {
-                        return Err(io::Error::other("more than one file found"));
-                    } else {
-                        candidate = Some(e.path());
-                    }
+                if !e.file_type()?.is_file() {
+                    continue; // we only care about regular files
+                }
+
+                let path = e.path();
+
+                if ignore_files.iter().any(|i| path == i.as_ref()) {
+                    continue; // file is in `ignore_files`
+                }
+
+                if candidate.is_some() {
+                    return Err(io::Error::other("more than one file found"));
+                } else {
+                    candidate = Some(path);
                 }
             }
         }
