@@ -8,7 +8,7 @@ as easy as running containers.
 
 ### Build and install from source (on Fedora)
 
-1. First install the runtime dependencies:
+1. Install `crun-qemu`'s runtime dependencies:
 
    ```console
    $ dnf install bash coreutils crun genisoimage libvirt-client libvirt-daemon-driver-qemu libvirt-daemon-log qemu-img qemu-system-x86-core shadow-utils util-linux virtiofsd
@@ -90,10 +90,11 @@ $ mkdir my-vm-image
 $ curl -LO --output-dir my-vm-image https://download.fedoraproject.org/pub/fedora/linux/releases/39/Cloud/x86_64/images/Fedora-Cloud-Base-39-1.5.x86_64.qcow2
 ```
 
-Then try it out:
+Then run:
 
-> This example does not work with Docker, since docker-run does not understand
-> the `--rootfs` flag.
+> This example does not work with Docker, as docker-run does not support the
+> `--rootfs` flag; see the next section for a Docker-compatible way of running
+> VM images.
 
 ```console
 $ podman run \
@@ -109,21 +110,31 @@ The VM console should take over your terminal. To abort the VM, press `ctrl-]`.
 You can also detach from the VM without terminating it by pressing `ctrl-p,
 ctrl-q`. Afterwards, reattach by running:
 
+> For this command to work with Docker, you must replace the `--latest` flag
+> with the container's name or ID.
+
 ```console
 $ podman attach --latest
 ```
 
 This command also works when you start the VM in detached mode using
-podman-run's `-d`/`--detach` flags.
+podman-run's `-d`/`--detach` flag.
 
 It's also possible to omit flags `-i`/`--interactive` and `-t`/`--tty` to
 podman-run, in which case you won't be able to interact with the VM but can
-still observe its console. Note that pressing `ctrl-]` will have no effect, so
-use `podman container rm --force --time=0 ...` to terminate the VM instead.
+still observe its console. Note that pressing `ctrl-]` will have no effect, but
+you can always use the following command to terminate the VM:
+
+> For this command to work with Docker, you must omit the `--time=0` option and
+> replace the `--latest` flag with the container's name or ID.
+
+```container
+$ podman container rm --force --time=0 --latest
+```
 
 #### From VM image files packaged into container images
 
-This runtime also works with container images that contain a VM image file with
+`crun-qemu` also works with container images that contain a VM image file with
 any name under `/` or under `/disk/`. No other files may exist in those
 directories. Containers built for use as [KubeVirt `containerDisk`s] follow this
 convention, so you can use those here:
@@ -150,7 +161,7 @@ this and do other first-boot customization, you can provide a [cloud-init]
 NoCloud configuration to the VM by passing in the non-standard option
 `--cloud-init` *after* the image specification:
 
-> For this example to work with Docker, you must provide an absolute path to
+> For this command to work with Docker, you must provide an absolute path to
 > `--cloud-init`.
 
 ```console
@@ -173,7 +184,7 @@ You should now be able to login with the default `fedora` username and password
 Similarly, you can provide an [Ignition] configuration to the VM by passing in
 the `--ignition` option:
 
-> For this example to work with Docker, you must provide an absolute path to
+> For this command to work with Docker, you must provide an absolute path to
 > `--ignition`.
 
 ```console
@@ -194,7 +205,7 @@ Assuming the VM supports cloud-init and exposes an SSH server on port 22, you
 can `ssh` into it using podman-exec as whatever user cloud-init considers to be
 the default for your VM image:
 
-> For this example to work with Docker, you must replace the `--latest` flag
+> For this command to work with Docker, you must replace the `--latest` flag
 > with the container's name or ID.
 
 ```console
@@ -229,7 +240,7 @@ username.
 
 Bind mounts are passed through to the VM as [virtiofs] file systems:
 
-> For this example to work with Docker, you must provide an absolute path to
+> For this command to work with Docker, you must provide an absolute path to
 > `--cloud-init`.
 
 ```console
@@ -256,7 +267,7 @@ If cloud-init is available, it is possible to pass block devices through to the
 VM at a specific path using podman-run's `--device` flag (this example assumes
 `/dev/ram0` to exist and to be accessible by the current user):
 
-> For this example to work with Docker, you must provide an absolute path to
+> For this command to work with Docker, you must provide an absolute path to
 > `--cloud-init`.
 
 ```console
@@ -278,7 +289,7 @@ Mediated vfio-pci devices (such as vGPUs) can be passed through to the VM by
 specifying the non-standard `--vfio-pci-mdev` option with a path to the mdev's
 sysfs directory:
 
-> For this example to work with Docker, you must provide an absolute path to
+> For this command to work with Docker, you must provide an absolute path to
 > `--vfio-pci-mdev`.
 
 ```console
