@@ -192,7 +192,7 @@ $ podman run \
     --runtime crun-qemu \
     --security-opt label=disable \
     -it --rm \
-    quay.io/crun-qemu/fedora-coreos:39 \
+    quay.io/crun-qemu/example-fedora-coreos:39 \
     --ignition examples/ignition/config.ign
 ```
 
