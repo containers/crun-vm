@@ -3,17 +3,19 @@
 use std::error::Error;
 use std::fs::{self, File};
 use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
-pub struct FirstBootOptions {
-    pub hostname: Option<String>,
-    pub block_device_targets: Vec<PathBuf>,
-    pub virtiofs_mounts: Vec<String>,
-    pub container_pub_key: String,
+use crate::commands::create::{BlockDevice, VirtiofsMount};
+
+pub struct FirstBootConfig<'a> {
+    pub hostname: Option<&'a str>,
+    pub container_public_key: &'a str,
+    pub block_devices: &'a [BlockDevice],
+    pub virtiofs_mounts: &'a [VirtiofsMount],
 }
 
-impl FirstBootOptions {
+impl FirstBootConfig<'_> {
     /// Returns `true` if a cloud-init config should be passed to the VM.
     pub fn apply_to_cloud_init_config(
         &self,
@@ -84,16 +86,17 @@ impl FirstBootOptions {
             _ => return Err(io::Error::other("cloud-init: invalid user-data file").into()),
         };
 
-        for mount in &self.virtiofs_mounts {
-            mounts.push(vec![mount, mount, "virtiofs", "defaults", "0", "0"].into());
+        for mount in self.virtiofs_mounts {
+            let path = mount.path_in_guest.to_str().unwrap();
+            mounts.push(vec![path, path, "virtiofs", "defaults", "0", "0"].into());
         }
 
         // adjust hostname
 
-        if let Some(hostname) = &self.hostname {
+        if let Some(hostname) = self.hostname {
             user_data_mapping.insert("preserve_hostname".into(), false.into());
             user_data_mapping.insert("prefer_fqdn_over_hostname".into(), false.into());
-            user_data_mapping.insert("hostname".into(), hostname.as_str().into());
+            user_data_mapping.insert("hostname".into(), hostname.into());
         }
 
         // adjust authorized keys
@@ -106,7 +109,7 @@ impl FirstBootOptions {
             _ => return Err(io::Error::other("cloud-init: invalid user-data file").into()),
         };
 
-        ssh_authorized_keys.push(self.container_pub_key.clone().into());
+        ssh_authorized_keys.push(self.container_public_key.into());
 
         // create block device symlinks
 
@@ -118,8 +121,8 @@ impl FirstBootOptions {
             _ => return Err(io::Error::other("cloud-init: invalid user-data file").into()),
         };
 
-        for (i, target) in self.block_device_targets.iter().enumerate() {
-            let parent = match target.parent() {
+        for (i, dev) in self.block_devices.iter().enumerate() {
+            let parent = match dev.path_in_guest.parent() {
                 Some(path) if path.to_str() != Some("") => Some(path),
                 _ => None,
             };
@@ -136,7 +139,7 @@ impl FirstBootOptions {
                 "ln".into(),
                 "--symbolic".into(),
                 format!("/dev/disk/by-id/virtio-crun-qemu-bdev-{i}").into(),
-                target.to_str().expect("path is utf-8").into(),
+                dev.path_in_guest.to_str().expect("path is utf-8").into(),
             ]));
         }
 
@@ -241,7 +244,7 @@ impl FirstBootOptions {
                     _ => return Err(io::Error::other("ignition: invalid config file").into()),
                 };
 
-                keys.push(self.container_pub_key.clone().into());
+                keys.push(self.container_public_key.into());
 
                 break;
             }
@@ -265,12 +268,12 @@ impl FirstBootOptions {
             _ => return Err(io::Error::other("ignition: invalid config file").into()),
         };
 
-        if let Some(hostname) = &self.hostname {
-            files.retain(|f| match f {
-                serde_json::Value::Object(m) if m.get("path") == Some(&"/etc/hostname".into()) => {
-                    false
-                }
-                _ => true,
+        if let Some(hostname) = self.hostname {
+            files.retain(|f| {
+                !matches!(
+                    f,
+                    serde_json::Value::Object(m) if m.get("path") == Some(&"/etc/hostname".into())
+                )
             });
 
             files.push(serde_json::json!({
@@ -293,9 +296,9 @@ impl FirstBootOptions {
             _ => return Err(io::Error::other("ignition: invalid config file").into()),
         };
 
-        for (i, path) in self.block_device_targets.iter().enumerate() {
+        for (i, dev) in self.block_devices.iter().enumerate() {
             links.push(serde_json::json!({
-                "path": path,
+                "path": dev.path_in_guest,
                 "overwrite": true,
                 "target": format!("/dev/disk/by-id/virtio-crun-qemu-bdev-{i}"),
                 "hard": false,
@@ -320,16 +323,18 @@ impl FirstBootOptions {
             _ => return Err(io::Error::other("ignition: invalid config file").into()),
         };
 
-        for mount in &self.virtiofs_mounts {
+        for mount in self.virtiofs_mounts {
+            let path = mount.path_in_guest.to_str().unwrap();
+
             // systemd insists on this unit file name format
             let systemd_unit_file_name =
-                format!("{}.mount", mount.trim_matches('/').replace('/', "-"));
+                format!("{}.mount", path.trim_matches('/').replace('/', "-"));
 
             let systemd_unit = format!(
                 "\
                 [Mount]\n\
-                What={mount}\n\
-                Where={mount}\n\
+                What={path}\n\
+                Where={path}\n\
                 Type=virtiofs\n\
                 \n\
                 [Install]\n\

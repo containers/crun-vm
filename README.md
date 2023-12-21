@@ -89,8 +89,10 @@ this repo without actually installing `crun-qemu`, *i.e.*, performing only steps
 
 Here we overview some of the major features provided by `crun-qemu`.
 
-The examples below use Podman, but unless otherwise stated you can use Docker
-instead without any changes to the arguments.
+To run the examples below using Docker instead of Podman, you must additionally
+pass `--security-opt label=disable` to docker-run. Other than that, and unless
+otherwise stated, you can simply replace `podman` with `docker` in the commands
+below.
 
 ### Booting VMs
 
@@ -112,13 +114,13 @@ Then run:
 ```console
 $ podman run \
     --runtime crun-qemu \
-    --security-opt label=disable \
     -it --rm \
     --rootfs my-vm-image \
     ""
 ```
 
-The VM console should take over your terminal. To abort the VM, press `ctrl-]`.
+(Note that this modifies the SELinux context of the image file.) The VM console
+should take over your terminal. To abort the VM, press `ctrl-]`.
 
 You can also detach from the VM without terminating it by pressing `ctrl-p,
 ctrl-q`. Afterwards, reattach by running:
@@ -155,7 +157,6 @@ convention, so you can use those here:
 ```console
 $ podman run \
     --runtime crun-qemu \
-    --security-opt label=disable \
     -it --rm \
     quay.io/containerdisks/fedora:39 \
     ""
@@ -183,7 +184,6 @@ meta-data  user-data  vendor-data
 
 $ podman run \
     --runtime crun-qemu \
-    --security-opt label=disable \
     -it --rm \
     quay.io/containerdisks/fedora:39 \
     --cloud-init examples/cloud-init/config
@@ -203,7 +203,6 @@ the `--ignition` option:
 ```console
 $ podman run \
     --runtime crun-qemu \
-    --security-opt label=disable \
     -it --rm \
     quay.io/crun-qemu/example-fedora-coreos:39 \
     --ignition examples/ignition/config.ign
@@ -224,7 +223,6 @@ the default for your VM image:
 ```console
 $ podman run \
     --runtime crun-qemu \
-    --security-opt label=disable \
     --detach --rm \
     quay.io/containerdisks/fedora:39 \
     ""
@@ -258,7 +256,6 @@ UDP port forwarding:
 ```console
 $ podman run \
     --runtime crun-qemu \
-    --security-opt label=disable \
     --detach --rm \
     -p 8000:80 \
     quay.io/crun-qemu/example-http-server:latest \
@@ -282,15 +279,23 @@ $ curl localhost:8000
 
 Bind mounts are passed through to the VM as [virtiofs] file systems:
 
+> :warning: This example recursively modifies the SELinux context of all files
+> under the path being mounted, in this case `./util`, which in the worst case
+> **may cause you to lose access to your files**. This is due to the `:z`
+> modifier included in the command below, which causes Podman to relabel the
+> volume so the guest can access it.
+>
+> You may drop this modifier at the cost of being unable to access the volume
+> from within the guest.
+
 > For this command to work with Docker, you must provide an absolute path to
 > `--cloud-init`.
 
 ```console
 $ podman run \
     --runtime crun-qemu \
-    --security-opt label=disable \
     -it --rm \
-    -v ./util:/home/fedora/util \
+    -v ./util:/home/fedora/util:z \
     quay.io/containerdisks/fedora:39 \
     --cloud-init examples/cloud-init/config
 ```
@@ -316,7 +321,6 @@ user):
 ```console
 $ podman run \
     --runtime crun-qemu \
-    --security-opt label=disable \
     -it --rm \
     --device /dev/ram0:/home/fedora/my-disk \
     quay.io/containerdisks/fedora:39 \
@@ -330,7 +334,8 @@ flags.
 
 Mediated vfio-pci devices (such as vGPUs) can be passed through to the VM by
 specifying the non-standard `--vfio-pci-mdev` option with a path to the mdev's
-sysfs directory:
+sysfs directory (this example assumes that the corresponding VFIO device under
+`/dev/vfio/` is accessible to the current user):
 
 > For this command to work with Docker, you must provide an absolute path to
 > `--vfio-pci-mdev`.
@@ -338,7 +343,6 @@ sysfs directory:
 ```console
 $ podman run \
     --runtime crun-qemu \
-    --security-opt label=disable \
     -it --rm \
     quay.io/containerdisks/fedora:39 \
     --vfio-pci-mdev /sys/bus/pci/devices/0000:00:02.0/5fa530b9-9fdf-4cde-8eb7-af73fcdeeaae

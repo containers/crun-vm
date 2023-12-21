@@ -37,9 +37,5 @@ pub fn podman<'a>(args: impl IntoIterator<Item = &'a str>) -> Output {
 
 #[must_use]
 pub fn podman_run<'a>(args: impl IntoIterator<Item = &'a str>) -> Output {
-    podman(
-        ["run", "--security-opt=label=disable"]
-            .into_iter()
-            .chain(args),
-    )
+    podman(["run"].into_iter().chain(args))
 }
