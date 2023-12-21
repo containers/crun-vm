@@ -228,13 +228,13 @@ $ podman run \
     --detach --rm \
     quay.io/containerdisks/fedora:39 \
     ""
-47e7aab2b1a52054f5904ccb108854db23885258f1bd0d87241740212f4fc9af
+8068a2c180e0f4bf494f5e0baa37d9f13a9810f76b361c0771b73666e47ec383
 
 $ podman exec --latest fedora whoami
 fedora
 
 $ podman exec -it --latest fedora
-[fedora@ibm-p8-kvm-07-guest-07 ~]$
+[fedora@8068a2c180e0 ~]$
 ```
 
 If the VM supports Ignition instead, you can use this method to `ssh` into it as

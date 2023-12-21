@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub struct FirstBootOptions {
+    pub hostname: Option<String>,
     pub block_device_targets: Vec<PathBuf>,
     pub virtiofs_mounts: Vec<String>,
     pub container_pub_key: String,
@@ -85,6 +86,14 @@ impl FirstBootOptions {
 
         for mount in &self.virtiofs_mounts {
             mounts.push(vec![mount, mount, "virtiofs", "defaults", "0", "0"].into());
+        }
+
+        // adjust hostname
+
+        if let Some(hostname) = &self.hostname {
+            user_data_mapping.insert("preserve_hostname".into(), false.into());
+            user_data_mapping.insert("prefer_fqdn_over_hostname".into(), false.into());
+            user_data_mapping.insert("hostname".into(), hostname.as_str().into());
         }
 
         // adjust authorized keys
@@ -238,7 +247,7 @@ impl FirstBootOptions {
             }
         }
 
-        // create block device symlinks
+        // adjust hostname
 
         let storage = match user_data_mapping
             .entry("storage")
@@ -247,6 +256,34 @@ impl FirstBootOptions {
             serde_json::Value::Object(map) => map,
             _ => return Err(io::Error::other("ignition: invalid config file").into()),
         };
+
+        let files = match storage
+            .entry("files")
+            .or_insert_with(|| serde_json::json!([]))
+        {
+            serde_json::Value::Array(files) => files,
+            _ => return Err(io::Error::other("ignition: invalid config file").into()),
+        };
+
+        if let Some(hostname) = &self.hostname {
+            files.retain(|f| match f {
+                serde_json::Value::Object(m) if m.get("path") == Some(&"/etc/hostname".into()) => {
+                    false
+                }
+                _ => true,
+            });
+
+            files.push(serde_json::json!({
+                "path": "/etc/hostname",
+                "mode": 420,
+                "overwrite": true,
+                "contents": {
+                    "source": format!("data:,{}", hostname)
+                }
+            }));
+        }
+
+        // create block device symlinks
 
         let links = match storage
             .entry("links")

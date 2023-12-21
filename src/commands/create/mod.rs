@@ -327,6 +327,7 @@ pub fn create(
     // create first-boot configs
 
     let first_boot_options = FirstBootOptions {
+        hostname: spec.hostname().clone(),
         block_device_targets: block_devices.iter().map(|d| &d.target).cloned().collect(),
         virtiofs_mounts: virtiofs_mounts.iter().map(|m| &m.target).cloned().collect(),
         container_pub_key: pub_key.trim().to_string(),
