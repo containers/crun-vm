@@ -237,6 +237,9 @@ $ podman exec -it --latest fedora
 [fedora@ibm-p8-kvm-07-guest-07 ~]$
 ```
 
+If the VM supports Ignition instead, you can use this method to `ssh` into it as
+user `core`.
+
 The `fedora` argument to podman-exec above, which would typically correspond to
 the command to be executed, determines instead the name of the user to `ssh`
 into the guest as. A command can optionally be specified with further arguments.

@@ -336,6 +336,7 @@ pub fn create(
         &runner_root_path,
         block_devices.iter().map(|d| &d.target),
         virtiofs_mounts.iter().map(|m| &m.target),
+        pub_key.trim(),
     )?;
 
     // create libvirt domain XML
@@ -373,6 +374,7 @@ fn gen_ignition_file(
     runner_root: impl AsRef<Path>,
     block_device_targets: impl IntoIterator<Item = impl AsRef<Path>>,
     virtiofs_mounts: impl IntoIterator<Item = impl AsRef<str>>,
+    container_pub_key: &str,
 ) -> Result<(), Box<dyn Error>> {
     let path = runner_root.as_ref().join("crun-qemu/ignition.ign");
 
@@ -395,6 +397,56 @@ fn gen_ignition_file(
         serde_json::Value::Object(m) => m,
         _ => return Err(io::Error::other("ignition: invalid config file").into()),
     };
+
+    // adjust authorized keys
+
+    let passwd = match user_data_mapping
+        .entry("passwd")
+        .or_insert_with(|| serde_json::json!({}))
+    {
+        serde_json::Value::Object(map) => map,
+        _ => return Err(io::Error::other("ignition: invalid config file").into()),
+    };
+
+    let users = match passwd
+        .entry("users")
+        .or_insert_with(|| serde_json::json!([]))
+    {
+        serde_json::Value::Array(users) => users,
+        _ => return Err(io::Error::other("ignition: invalid config file").into()),
+    };
+
+    let users_contains_core = users.iter().any(|u| match u {
+        serde_json::Value::Object(m) => m.get("name") == Some(&"core".into()),
+        _ => false,
+    });
+
+    if !users_contains_core {
+        users.push(serde_json::json!({
+            "name": "core",
+        }));
+    }
+
+    for user in users {
+        let map = match user {
+            serde_json::Value::Object(m) => m,
+            _ => return Err(io::Error::other("ignition: invalid config file").into()),
+        };
+
+        if map.get("name") == Some(&"core".into()) {
+            let keys = match map
+                .entry("sshAuthorizedKeys")
+                .or_insert_with(|| serde_json::json!([]))
+            {
+                serde_json::Value::Array(keys) => keys,
+                _ => return Err(io::Error::other("ignition: invalid config file").into()),
+            };
+
+            keys.push(container_pub_key.into());
+
+            break;
+        }
+    }
 
     // create block device symlinks
 
