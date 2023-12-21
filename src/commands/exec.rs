@@ -22,6 +22,7 @@ pub fn exec(
         .expect("first command argument is user to ssh as into the vm");
 
     let mut new_command = vec![];
+
     if ssh_user != "-" {
         new_command.extend([
             "ssh".to_string(),
@@ -34,7 +35,12 @@ pub fn exec(
             "localhost".to_string(),
         ]);
     }
+
     new_command.extend(command.iter().skip(1).cloned());
+
+    if ssh_user == "-" && new_command.is_empty() {
+        new_command.push("/bin/sh".to_string());
+    }
 
     process.set_args(Some(new_command));
 
