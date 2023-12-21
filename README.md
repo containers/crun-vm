@@ -60,8 +60,19 @@ as easy as running containers.
        }
        ```
 
-     - Then reload the `docker` service for the new configuration to take
-       effect:
+     - In file `/etc/sysconfig/docker`, replace the line:
+
+       ```
+       --default-ulimit nofile=1024:1024 \
+       ```
+
+       With:
+
+       ```
+       --default-ulimit nofile=262144:262144 \
+       ```
+
+     - Reload the `docker` service for the new configuration to take effect:
 
        ```console
        $ service docker reload
@@ -234,6 +245,32 @@ If you actually just want to exec into the container in which the VM is running
 (probably to debug some problem with `crun-qemu` itself), pass in `-` as the
 username.
 
+### Port forwarding
+
+You can use podman-run's standard `-p`/`--publish` option to set up TCP and/or
+UDP port forwarding:
+
+```console
+$ podman run \
+    --runtime crun-qemu \
+    --security-opt label=disable \
+    --detach --rm \
+    -p 8000:80 \
+    quay.io/crun-qemu/example-http-server:latest \
+    ""
+36c8705482589cfc4336a03d3802e7699f5fb228123d18e693488ac7b80116d1
+
+$ curl localhost:8000
+<!DOCTYPE HTML>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Directory listing for /</title>
+</head>
+<body>
+[...]
+```
+
 ### Passing things through to the VM
 
 #### Directory bind mounts
@@ -255,10 +292,10 @@ $ podman run \
 
 If the VM image support cloud-init, the volume will automatically be mounted
 inside the guest at the given destination path. Otherwise, you can mount it
-manually with:
+manually by running the following command in the guest:
 
 ```console
-mount -t virtiofs /home/fedora/util /home/fedora/util
+$ mount -t virtiofs /home/fedora/util /home/fedora/util
 ```
 
 #### Block devices

@@ -742,9 +742,8 @@ fn write_domain_xml(
             s(w, "interface", &[("type", "user")], |w| {
                 se(w, "backend", &[("type", "passt")])?;
                 se(w, "model", &[("type", "virtio")])?;
-                s(w, "portForward", &[("proto", "tcp")], |w| {
-                    se(w, "range", &[("start", "22"), ("to", "22")])
-                })?;
+                se(w, "portForward", &[("proto", "tcp")])?;
+                se(w, "portForward", &[("proto", "udp")])?;
                 Ok(())
             })?;
 
