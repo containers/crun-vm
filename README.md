@@ -2,7 +2,9 @@
 
 This is an **experimental** [OCI Runtime] that enables [Podman] and [Docker] to
 run VM images. The objective is to make running VMs (in simple configurations)
-as easy as running containers.
+as easy as running containers, using standard container tooling and (mostly)
+standard options and without the need to go in-depth into virtualization
+technologies like libvirt.
 
 ## Installing
 
