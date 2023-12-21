@@ -292,9 +292,9 @@ $ podman run \
     --cloud-init examples/cloud-init/config
 ```
 
-If the VM image support cloud-init, the volume will automatically be mounted
-inside the guest at the given destination path. Otherwise, you can mount it
-manually by running the following command in the guest:
+If the VM image supports cloud-init or Ignition, the volume will automatically
+be mounted inside the guest at the given destination path. Otherwise, you can
+mount it manually by running the following command in the guest:
 
 ```console
 $ mount -t virtiofs /home/fedora/util /home/fedora/util
@@ -302,9 +302,10 @@ $ mount -t virtiofs /home/fedora/util /home/fedora/util
 
 #### Block devices
 
-If cloud-init is available, it is possible to pass block devices through to the
-VM at a specific path using podman-run's `--device` flag (this example assumes
-`/dev/ram0` to exist and to be accessible by the current user):
+If cloud-init or Ignition are supported by the VM, it is possible to pass block
+devices through to it at a specific path using podman-run's `--device` flag
+(this example assumes `/dev/ram0` to exist and to be accessible by the current
+user):
 
 > For this command to work with Docker, you must provide an absolute path to
 > `--cloud-init`.
@@ -314,7 +315,7 @@ $ podman run \
     --runtime crun-qemu \
     --security-opt label=disable \
     -it --rm \
-    --device /dev/ram0:/path/in/vm/my-disk \
+    --device /dev/ram0:/home/fedora/my-disk \
     quay.io/containerdisks/fedora:39 \
     --cloud-init examples/cloud-init/config
 ```
