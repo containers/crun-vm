@@ -1,10 +1,10 @@
 # The `crun-qemu` OCI runtime
 
 This is an **experimental** [OCI Runtime] that enables [Podman] and [Docker] to
-run VM images. The objective is to make running VMs (in simple configurations)
-as easy as running containers, using standard container tooling and (mostly)
-standard options and without the need to go in-depth into virtualization
-technologies like libvirt.
+run Virtual Machine (VM) images. The objective is to make running VMs (in simple
+configurations) as easy as running containers, using standard container tooling
+and without the need for in-depth knowledge of virtualization technologies like
+libvirt.
 
 ## Installing
 
@@ -16,7 +16,7 @@ technologies like libvirt.
    $ dnf install bash coreutils crun genisoimage libselinux libvirt-client libvirt-daemon-driver-qemu libvirt-daemon-log qemu-img qemu-system-x86-core shadow-utils util-linux virtiofsd
    ```
 
-2. Install Rust and Cargo if you don't already have Rust tooling available:
+2. Install Rust and Cargo if you do not already have Rust tooling available:
 
    ```console
    $ dnf install cargo
@@ -28,8 +28,8 @@ technologies like libvirt.
    $ cargo build
    ```
 
-4. Copy the `target/debug/crun-qemu` executable to wherever you prefer, for
-   instance `/usr/local/bin/`:
+4. Copy the `target/debug/crun-qemu` binary to wherever you prefer, for instance
+   `/usr/local/bin/`:
 
    ```console
    $ cp target/debug/crun-qemu /usr/local/bin/
@@ -37,9 +37,7 @@ technologies like libvirt.
 
 5. If you're using Podman:
 
-     - Merge the following configuration into the
-       `/etc/containers/containers.conf` file, creating it if it doesn't exist
-       (adjust the path below according to where you copied `crun-qemu` to):
+     - Merge the following configuration into `/etc/containers/containers.conf`:
 
        ```toml
        [engine.runtimes]
@@ -48,9 +46,7 @@ technologies like libvirt.
 
    If you're using Docker:
 
-     - Merge the following configuration into the `/etc/docker/daemon.json`
-       file, creating it if it doesn't exist (adjust the path below according to
-       where you copied `crun-qemu` to):
+     - Merge the following configuration into `/etc/docker/daemon.json`:
 
        ```json
        {
@@ -62,7 +58,7 @@ technologies like libvirt.
        }
        ```
 
-     - In file `/etc/sysconfig/docker`, replace the line:
+     - In `/etc/sysconfig/docker`, replace the line:
 
        ```
        --default-ulimit nofile=1024:1024 \
@@ -119,8 +115,7 @@ $ podman run \
     ""
 ```
 
-(Note that this modifies the SELinux context of the image file.) The VM console
-should take over your terminal. To abort the VM, press `ctrl-]`.
+The VM console should take over your terminal. To abort the VM, press `ctrl-]`.
 
 You can also detach from the VM without terminating it by pressing `ctrl-p,
 ctrl-q`. Afterwards, reattach by running:
@@ -135,7 +130,7 @@ $ podman attach --latest
 This command also works when you start the VM in detached mode using
 podman-run's `-d`/`--detach` flag.
 
-It's also possible to omit flags `-i`/`--interactive` and `-t`/`--tty` to
+It is also possible to omit flags `-i`/`--interactive` and `-t`/`--tty` to
 podman-run, in which case you won't be able to interact with the VM but can
 still observe its console. Note that pressing `ctrl-]` will have no effect, but
 you can always use the following command to terminate the VM:
@@ -144,7 +139,7 @@ you can always use the following command to terminate the VM:
 > replace the `--latest` flag with the container's name or ID.
 
 ```container
-$ podman container rm --force --time=0 --latest
+$ podman rm --force --time=0 --latest
 ```
 
 #### From VM image files packaged into container images
@@ -213,9 +208,8 @@ You should now be able to login with the default `core` username and password
 
 ### SSH'ing into the VM
 
-Assuming the VM supports cloud-init and exposes an SSH server on port 22, you
-can `ssh` into it using podman-exec as whatever user cloud-init considers to be
-the default for your VM image:
+Assuming the VM supports cloud-init or Ignition and exposes an SSH server on
+port 22, you can `ssh` into it using podman-exec as the VMs default user:
 
 > For this command to work with Docker, you must replace the `--latest` flag
 > with the container's name or ID.
@@ -235,14 +229,16 @@ $ podman exec -it --latest fedora
 [fedora@8068a2c180e0 ~]$
 ```
 
-If the VM supports Ignition instead, you can use this method to `ssh` into it as
-user `core`.
+With cloud-init, the default user can vary between VM images. With Ignition,
+`core` is considered to be the default user. In both cases, if the SSH server
+allows password authentication, you should also be able to login as any other
+user.
 
 The `fedora` argument to podman-exec above, which would typically correspond to
 the command to be executed, determines instead the name of the user to `ssh`
-into the guest as. A command can optionally be specified with further arguments.
-If no command is specified, a login shell is initiated. In this case, you
-probably also want to pass flags `-it` to podman-exec.
+into the VM as. A command can optionally be specified with further arguments. If
+no command is specified, a login shell is initiated. In this case, you probably
+also want to pass flags `-it` to podman-exec.
 
 If you actually just want to exec into the container in which the VM is running
 (probably to debug some problem with `crun-qemu` itself), pass in `-` as the
@@ -277,16 +273,16 @@ $ curl localhost:8000
 
 #### Directory bind mounts
 
-Bind mounts are passed through to the VM as [virtiofs] file systems:
+Bind mounting directories into the VM is supported:
 
 > :warning: This example recursively modifies the SELinux context of all files
 > under the path being mounted, in this case `./util`, which in the worst case
-> **may cause you to lose access to your files**. This is due to the `:z`
-> modifier included in the command below, which causes Podman to relabel the
-> volume so the guest can access it.
+> **may cause you to lose access to your files**. This is due to the `:z` volume
+> mount modifier, which instructs Podman to relabel the volume so that the VM
+> can access it.
 >
-> You may drop this modifier at the cost of being unable to access the volume
-> from within the guest.
+> Alternatively, you may remove this modifier from the command below and add
+> `--security-opt label=disable` instead to disable SELinux enforcement.
 
 > For this command to work with Docker, you must provide an absolute path to
 > `--cloud-init`.
@@ -301,8 +297,8 @@ $ podman run \
 ```
 
 If the VM image supports cloud-init or Ignition, the volume will automatically
-be mounted inside the guest at the given destination path. Otherwise, you can
-mount it manually by running the following command in the guest:
+be mounted in it at the given destination path. Otherwise, you can mount it
+manually by running the following command in the VM:
 
 ```console
 $ mount -t virtiofs /home/fedora/util /home/fedora/util
@@ -337,9 +333,6 @@ specifying the non-standard `--vfio-pci-mdev` option with a path to the mdev's
 sysfs directory (this example assumes that the corresponding VFIO device under
 `/dev/vfio/` is accessible to the current user):
 
-> For this command to work with Docker, you must provide an absolute path to
-> `--vfio-pci-mdev`.
-
 ```console
 $ podman run \
     --runtime crun-qemu \
@@ -350,8 +343,8 @@ $ podman run \
 
 ## How it works
 
-Internally, `crun-qemu` uses [crun] to run a different container that in turn
-uses [libvirt] to run a [QEMU] guest using the user-specified VM image.
+Internally, `crun-qemu` uses [crun] to run an isolated [libvirt] instance that
+boots a [QEMU] VM from the user-specified image.
 
 ## License
 
@@ -367,4 +360,3 @@ This project is released under the GPL 2.0 (or later) license. See
 [Podman]: https://podman.io/
 [OCI Runtime]: https://github.com/opencontainers/runtime-spec/blob/v1.1.0/spec.md
 [QEMU]: https://www.qemu.org/
-[virtiofs]: https://virtio-fs.gitlab.io/
