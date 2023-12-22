@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use std::ffi::CString;
+use std::ffi::{c_char, CString};
 use std::fs;
 use std::io;
 use std::os::unix::ffi::OsStrExt;
@@ -12,10 +12,14 @@ use serde::Deserialize;
 use tempfile::TempDir;
 
 pub fn set_file_context(path: impl AsRef<Path>, context: &str) -> io::Result<()> {
+    extern "C" {
+        fn setfilecon(path: *const c_char, con: *const c_char) -> i32;
+    }
+
     let path = CString::new(path.as_ref().as_os_str().as_bytes())?;
     let context = CString::new(context.as_bytes())?;
 
-    if unsafe { selinux_sys::setfilecon(path.as_ptr(), context.as_ptr()) } != 0 {
+    if unsafe { setfilecon(path.as_ptr(), context.as_ptr()) } != 0 {
         return Err(io::Error::last_os_error());
     }
 

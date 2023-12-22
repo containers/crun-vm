@@ -13,7 +13,7 @@ technologies like libvirt.
 1. Install `crun-qemu`'s runtime dependencies:
 
    ```console
-   $ dnf install bash coreutils crun genisoimage libvirt-client libvirt-daemon-driver-qemu libvirt-daemon-log qemu-img qemu-system-x86-core shadow-utils util-linux virtiofsd
+   $ dnf install bash coreutils crun genisoimage libselinux libvirt-client libvirt-daemon-driver-qemu libvirt-daemon-log qemu-img qemu-system-x86-core shadow-utils util-linux virtiofsd
    ```
 
 2. Install Rust and Cargo if you don't already have Rust tooling available:

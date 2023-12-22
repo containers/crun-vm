@@ -28,10 +28,6 @@ version = "0.6.0"
 default-features = false
 features = ["runtime"]
 
-[dependencies.selinux-sys]
-version = "0.6.0"
-default-features = false
-
 [dependencies.serde]
 version = "1.0"
 
