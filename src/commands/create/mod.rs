@@ -224,7 +224,7 @@ fn set_up_directory_bind_mounts(
     let mut directory_bind_mounts: Vec<GuestMount> = vec![];
     let mut mounts = spec.mounts().clone().unwrap_or_default();
 
-    for (i, mount) in mounts.iter_mut().enumerate() {
+    for mount in &mut mounts {
         if mount.typ().as_deref() != Some("bind")
             || TARGETS_TO_IGNORE.contains(&mount.destination().to_str().unwrap_or_default())
             || mount.destination().starts_with("/dev/")
@@ -241,7 +241,10 @@ fn set_up_directory_bind_mounts(
             continue;
         }
 
-        let path_in_container = PathBuf::from(format!("/crun-qemu/dir-bind-mounts/{}", i));
+        let path_in_container = PathBuf::from(format!(
+            "/crun-qemu/dir-bind-mounts/{}",
+            directory_bind_mounts.len()
+        ));
         let path_in_guest = mount.destination().clone();
 
         // redirect the mount to a path that we control in container

@@ -296,12 +296,13 @@ $ podman run \
     --cloud-init examples/cloud-init/config
 ```
 
-If the VM image supports cloud-init or Ignition, the volume will automatically
-be mounted in it at the given destination path. Otherwise, you can mount it
-manually by running the following command in the VM:
+If the VM supports cloud-init or Ignition, the volume will automatically be
+mounted at the given destination path. Otherwise, you can mount it manually with
+the following command, where `<index>` must be the 0-based index of the volume
+according to the order the `-v`/`--volume` or `--mount` flags where given in:
 
 ```console
-$ mount -t virtiofs /home/fedora/util /home/fedora/util
+$ mount -t virtiofs virtiofs-<index> /home/fedora/util
 ```
 
 #### Block devices

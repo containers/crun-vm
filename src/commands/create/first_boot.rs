@@ -86,9 +86,10 @@ impl FirstBootConfig<'_> {
             _ => return Err(io::Error::other("cloud-init: invalid user-data file").into()),
         };
 
-        for mount in self.virtiofs_mounts {
+        for (i, mount) in self.virtiofs_mounts.iter().enumerate() {
+            let tag = format!("virtiofs-{}", i);
             let path = mount.path_in_guest.to_str().unwrap();
-            mounts.push(vec![path, path, "virtiofs", "defaults", "0", "0"].into());
+            mounts.push(vec![&tag, path, "virtiofs", "defaults", "0", "0"].into());
         }
 
         // adjust hostname
@@ -323,7 +324,8 @@ impl FirstBootConfig<'_> {
             _ => return Err(io::Error::other("ignition: invalid config file").into()),
         };
 
-        for mount in self.virtiofs_mounts {
+        for (i, mount) in self.virtiofs_mounts.iter().enumerate() {
+            let tag = format!("virtiofs-{}", i);
             let path = mount.path_in_guest.to_str().unwrap();
 
             // systemd insists on this unit file name format
@@ -333,7 +335,7 @@ impl FirstBootConfig<'_> {
             let systemd_unit = format!(
                 "\
                 [Mount]\n\
-                What={path}\n\
+                What={tag}\n\
                 Where={path}\n\
                 Type=virtiofs\n\
                 \n\

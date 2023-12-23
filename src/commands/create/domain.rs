@@ -129,22 +129,17 @@ pub fn set_up_libvirt_domain_xml(
                 Ok(())
             })?;
 
-            for mount in virtiofs_mounts {
+            for (i, mount) in virtiofs_mounts.iter().enumerate() {
+                let path = mount.path_in_container.to_str().unwrap();
+                let tag = format!("virtiofs-{}", i);
+
                 s(w, "filesystem", &[("type", "mount")], |w| {
                     se(w, "driver", &[("type", "virtiofs")])?;
                     s(w, "binary", &[("path", "/crun-qemu/virtiofsd")], |w| {
                         se(w, "sandbox", &[("mode", "chroot")])
                     })?;
-                    se(
-                        w,
-                        "source",
-                        &[("dir", mount.path_in_container.to_str().unwrap())],
-                    )?;
-                    se(
-                        w,
-                        "target",
-                        &[("dir", mount.path_in_guest.to_str().unwrap())],
-                    )?;
+                    se(w, "source", &[("dir", path)])?;
+                    se(w, "target", &[("dir", &tag)])?;
                     Ok(())
                 })?;
             }
