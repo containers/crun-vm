@@ -91,6 +91,7 @@ pub trait SpecExt {
         &mut self,
         linux_device_cgroup: oci_spec::runtime::LinuxDeviceCgroup,
     );
+    fn process_capabilities_insert_beip(&mut self, capability: oci_spec::runtime::Capability);
     fn linux_seccomp_syscalls_push(&mut self, linux_syscall: oci_spec::runtime::LinuxSyscall);
 }
 
@@ -139,6 +140,32 @@ impl SpecExt for oci_spec::runtime::Spec {
                 Some(resources)
             });
             Some(linux)
+        });
+    }
+
+    fn process_capabilities_insert_beip(&mut self, capability: oci_spec::runtime::Capability) {
+        self.set_process({
+            let mut process = self.process().clone().expect("process config");
+            process.set_capabilities({
+                let mut capabilities = process.capabilities().clone().unwrap_or_default();
+
+                fn insert(
+                    cap: oci_spec::runtime::Capability,
+                    to: &Option<oci_spec::runtime::Capabilities>,
+                ) -> Option<oci_spec::runtime::Capabilities> {
+                    let mut caps = to.clone().unwrap_or_default();
+                    caps.insert(cap);
+                    Some(caps)
+                }
+
+                capabilities.set_bounding(insert(capability, capabilities.bounding()));
+                capabilities.set_effective(insert(capability, capabilities.effective()));
+                capabilities.set_inheritable(insert(capability, capabilities.inheritable()));
+                capabilities.set_permitted(insert(capability, capabilities.permitted()));
+
+                Some(capabilities)
+            });
+            Some(process)
         });
     }
 

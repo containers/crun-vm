@@ -43,7 +43,7 @@ pub fn create(
 
     set_up_directories_and_files_from_host(&mut spec)?;
 
-    set_up_seccomp_profile(&mut spec, is_docker);
+    set_up_security(&mut spec);
 
     spec.save(&config_path)?;
     spec.save(spec.root_path().join("crun-qemu/config.json"))?; // to aid debugging
@@ -416,22 +416,27 @@ fn set_up_directories_and_files_from_host(
     Ok(())
 }
 
-fn set_up_seccomp_profile(spec: &mut oci_spec::runtime::Spec, is_docker: bool) {
-    if is_docker {
-        // Docker's default seccomp profile blocks some systems calls that passt requires, so we
-        // just adjust the profile to allow them.
-        //
-        // TODO: This doesn't seem reasonable at all. Should we just force users to use a different
-        // seccomp profile? Should passt provide the option to bypass a lot of the isolation that it
-        // does, given we're already in a container *and* under a seccomp profile?
-        spec.linux_seccomp_syscalls_push(
-            oci_spec::runtime::LinuxSyscallBuilder::default()
-                .names(["mount", "pivot_root", "umount2", "unshare"].map(String::from))
-                .action(oci_spec::runtime::LinuxSeccompAction::ScmpActAllow)
-                .build()
-                .unwrap(),
-        );
-    }
+fn set_up_security(spec: &mut oci_spec::runtime::Spec) {
+    // Some environments, notably CRI-O, launch the container without CAP_CHROOT by default, which
+    // we need for passt's --sandbox=chroot.
+    //
+    // TODO: This doesn't seem reasonable. Should we just force users to configure the additional
+    // capability? Should we just launch passt with --sanbox=none?
+    spec.process_capabilities_insert_beip(oci_spec::runtime::Capability::SysChroot);
+
+    // Docker's default seccomp profile blocks some systems calls that passt requires, so we
+    // just adjust the profile to allow them.
+    //
+    // TODO: This doesn't seem reasonable at all. Should we just force users to use a different
+    // seccomp profile? Should passt provide the option to bypass a lot of the isolation that it
+    // does, given we're already in a container *and* under a seccomp profile?
+    spec.linux_seccomp_syscalls_push(
+        oci_spec::runtime::LinuxSyscallBuilder::default()
+            .names(["mount", "pivot_root", "umount2", "unshare"].map(String::from))
+            .action(oci_spec::runtime::LinuxSeccompAction::ScmpActAllow)
+            .build()
+            .unwrap(),
+    );
 }
 
 /// Configure cloud-init and Ignition for first-boot customization.
