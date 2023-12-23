@@ -24,7 +24,14 @@ echo 'group = "root"' >> /etc/libvirt/qemu.conf
 echo 'cgroup_controllers = []' >> /etc/libvirt/qemu.conf
 
 virtlogd --daemon
-virtqemud --daemon
+
+if command -v virtqemud; then
+    virtqemud --daemon
+    socket=/run/libvirt/virtqemud-sock
+else
+    libvirtd --daemon
+    socket=/run/libvirt/libvirt-sock
+fi
 
 # libvirt doesn't let us pass --modcaps=-mknod to virtiofsd (which is necessary
 # since we ourselves don't have that capability and virtiofsd would fail trying
@@ -57,7 +64,7 @@ function __ensure_tty() {
 }
 
 __ensure_tty virsh \
-    --connect qemu+unix:///session?socket=/run/libvirt/virtqemud-sock \
+    --connect "qemu+unix:///session?socket=$socket" \
     --quiet \
     create \
     /crun-qemu/domain.xml \
