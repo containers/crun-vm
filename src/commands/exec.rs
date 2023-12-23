@@ -39,7 +39,7 @@ pub fn exec(
     new_command.extend(command.iter().skip(1).cloned());
 
     if ssh_user == "-" && new_command.is_empty() {
-        new_command.push("/bin/sh".to_string());
+        new_command.push("/bin/bash".to_string());
     }
 
     process.set_args(Some(new_command));
