@@ -165,7 +165,7 @@ in a container image.
 
 #### cloud-init
 
-In the examples above, you were able to boot the VM but not to login. To fix
+In the examples above, you were able to boot the VM but not to log in. To fix
 this and do other first-boot customization, you can provide a [cloud-init]
 NoCloud configuration to the VM by passing in the non-standard option
 `--cloud-init` *after* the image specification:
@@ -184,7 +184,7 @@ $ podman run \
     --cloud-init examples/cloud-init/config
 ```
 
-You should now be able to login with the default `fedora` username and password
+You should now be able to log in with the default `fedora` username and password
 `pass`.
 
 #### Ignition
@@ -203,7 +203,7 @@ $ podman run \
     --ignition examples/ignition/config.ign
 ```
 
-You should now be able to login with the default `core` username and password
+You should now be able to log in with the default `core` username and password
 `pass`.
 
 ### SSH'ing into the VM
@@ -222,16 +222,16 @@ $ podman run \
     ""
 8068a2c180e0f4bf494f5e0baa37d9f13a9810f76b361c0771b73666e47ec383
 
-$ podman exec --latest fedora whoami
+$ podman exec --latest -- fedora whoami
 fedora
 
-$ podman exec -it --latest fedora
+$ podman exec -it --latest -- fedora
 [fedora@8068a2c180e0 ~]$
 ```
 
 With cloud-init, the default user can vary between VM images. With Ignition,
 `core` is considered to be the default user. In both cases, if the SSH server
-allows password authentication, you should also be able to login as any other
+allows password authentication, you should also be able to log in as any other
 user.
 
 The `fedora` argument to podman-exec above, which would typically correspond to
