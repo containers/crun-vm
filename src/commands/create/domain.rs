@@ -244,6 +244,10 @@ fn get_vcpu_count(spec: &oci_spec::runtime::Spec) -> u64 {
         let quota: u64 = linux_cpu.quota()?.try_into().ok()?;
         let period: u64 = linux_cpu.period()?;
 
+        if quota == 0 {
+            return None;
+        }
+
         // return "quota / period" rounded up
         quota
             .checked_add(period)?
