@@ -40,16 +40,10 @@ chmod +x /crun-qemu/virtiofsd
 # When running under Docker or rootful Podman, passt will realize that it is
 # running as *actual* root and will switch to being user nobody, but this will
 # make it fail to create its PID file because its directory was created by
-# libvirt and is thus owned by root:root.
-#
-# We get around that by providing a wrapper script around passt that first gives
-# "others" write access to the directory. This wrapper has already been bind
-# mounted onto /usr/bin/passt at this point.
-cat <<EOF >>/crun-qemu/passt/wrapper
-#!/bin/bash
-chmod o+w /run/libvirt/qemu/passt/ && /crun-qemu/passt/passt "\$@"
-EOF
-chmod +x /crun-qemu/passt/wrapper
+# libvirt and is thus owned by root:root. Work around this by creating the
+# directory ourselves and making it writable for others.
+mkdir -p /run/libvirt/qemu/passt
+chmod o+w /run/libvirt/qemu/passt
 
 # launch VM
 

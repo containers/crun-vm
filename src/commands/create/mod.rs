@@ -4,7 +4,7 @@ mod domain;
 mod first_boot;
 
 use std::error::Error;
-use std::fs::{self, File, Permissions};
+use std::fs::{self, Permissions};
 use std::io;
 use std::iter;
 use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
@@ -49,7 +49,6 @@ pub fn create(
     set_up_directories_and_files_from_host(&mut spec)?;
 
     set_up_seccomp_profile(&mut spec, is_docker);
-    set_up_passt_wrapper(&mut spec)?;
 
     spec.save(&config_path)?;
     spec.save(spec.root_path().join("crun-qemu/config.json"))?; // to aid debugging
@@ -450,29 +449,6 @@ fn set_up_seccomp_profile(spec: &mut oci_spec::runtime::Spec, is_docker: bool) {
                 .unwrap(),
         );
     }
-}
-
-fn set_up_passt_wrapper(spec: &mut oci_spec::runtime::Spec) -> Result<(), Box<dyn Error>> {
-    fs::create_dir_all(spec.root_path().join("crun-qemu/passt"))?;
-
-    fs::copy(
-        "/usr/bin/passt",
-        spec.root_path().join("crun-qemu/passt/passt"),
-    )?;
-
-    File::create(spec.root_path().join("crun-qemu/passt/wrapper"))?;
-
-    spec.mounts_push(
-        oci_spec::runtime::MountBuilder::default()
-            .typ("bind")
-            .source(spec.root_path().join("crun-qemu/passt/wrapper"))
-            .destination("usr/bin/passt")
-            .options(["bind".to_string(), "rprivate".to_string()])
-            .build()
-            .unwrap(),
-    );
-
-    Ok(())
 }
 
 /// Configure cloud-init and Ignition for first-boot customization.
