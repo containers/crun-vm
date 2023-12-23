@@ -9,7 +9,6 @@ use std::process::{Command, Stdio};
 
 use nix::mount::MsFlags;
 use serde::Deserialize;
-use tempfile::TempDir;
 
 pub fn set_file_context(path: impl AsRef<Path>, context: &str) -> io::Result<()> {
     extern "C" {
@@ -35,37 +34,46 @@ pub fn link_directory_with_separate_context(
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,
     context: &str,
+    private_dir: impl AsRef<Path>,
 ) -> io::Result<()> {
-    let temp_dir = TempDir::new()?;
+    let upper_dir = private_dir.as_ref().join("upper");
+    let work_dir = private_dir.as_ref().join("work");
 
-    let upper_dir = temp_dir.path().join("upper");
-    let work_dir = temp_dir.path().join("work");
-
-    fs::create_dir(&upper_dir)?;
-    fs::create_dir(&work_dir)?;
+    fs::create_dir_all(&upper_dir)?;
+    fs::create_dir_all(&work_dir)?;
     fs::create_dir_all(to.as_ref())?;
 
-    // TODO: Harden quoting.
-    // TODO: Podman probably won't umount this for us.
-    nix::mount::mount(
+    fn escape_path(mount_option: &str) -> String {
+        mount_option.replace('\\', "\\\\").replace(',', "\\,")
+    }
+
+    fn escape_context(mount_option: &str) -> String {
+        assert!(!mount_option.contains('"'));
+        format!("\"{}\"", mount_option)
+    }
+
+    let options = format!(
+        "lowerdir={},upperdir={},workdir={},context={}",
+        escape_path(from.as_ref().to_str().unwrap()),
+        escape_path(upper_dir.to_str().unwrap()),
+        escape_path(work_dir.to_str().unwrap()),
+        escape_context(context),
+    );
+
+    if let Err(e) = nix::mount::mount(
         Some("overlay"),
         to.as_ref(),
         Some("overlay"),
         MsFlags::empty(),
-        Some(
-            format!(
-                "lowerdir={},upperdir={},workdir={},context=\"{}\"",
-                from.as_ref().to_str().unwrap(),
-                upper_dir.to_str().unwrap(),
-                work_dir.to_str().unwrap(),
-                context,
-            )
-            .as_str(),
-        ),
-    )?;
-
-    // TODO: Clean up the temporary directory.
-    let _ = temp_dir.into_path();
+        Some(options.as_str()),
+    ) {
+        return Err(io::Error::other(format!(
+            "mount(\"overlay\", {:?}, \"overlay\", 0, {:?}) failed: {}",
+            to.as_ref().to_str().unwrap(),
+            options,
+            e
+        )));
+    }
 
     Ok(())
 }

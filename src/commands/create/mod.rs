@@ -40,7 +40,7 @@ pub fn create(
     let custom_options = CustomOptions::from_spec(&spec, is_docker)?;
 
     set_up_container_root(&mut spec, &args.bundle)?;
-    let base_vm_image_info = set_up_vm_image(&spec, &original_root_path)?;
+    let base_vm_image_info = set_up_vm_image(&spec, &args.bundle, &original_root_path)?;
 
     let virtiofs_mounts = set_up_directory_bind_mounts(&mut spec)?;
     let block_devices = set_up_block_devices(&mut spec)?;
@@ -175,6 +175,7 @@ fn set_up_container_root(
 
 fn set_up_vm_image(
     spec: &oci_spec::runtime::Spec,
+    bundle_path: &Path,
     original_root_path: &Path,
 ) -> Result<VmImageInfo, Box<dyn Error>> {
     // where inside the container to look for the VM image
@@ -195,6 +196,7 @@ fn set_up_vm_image(
             base_vm_image_path_in_host.parent().unwrap(),
             spec.root_path().join("crun-qemu/image"),
             context,
+            bundle_path.join("crun-qemu-vm-image-overlayfs"),
         )?;
     } else {
         todo!("TODO: probably just add a mount to the spec")
