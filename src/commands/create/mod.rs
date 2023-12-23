@@ -188,18 +188,14 @@ fn set_up_vm_image(
         &FILES_TO_IGNORE.map(|f| original_root_path.join(f)),
     )?;
 
-    // mount user-provided VM image file into container with the appropriate SELinux context
+    // mount user-provided VM image file into container
 
-    if let Some(context) = spec.mount_label() {
-        link_directory_with_separate_context(
-            base_vm_image_path_in_host.parent().unwrap(),
-            spec.root_path().join("crun-qemu/image"),
-            context,
-            bundle_path.join("crun-qemu-vm-image-overlayfs"),
-        )?;
-    } else {
-        todo!("TODO: probably just add a mount to the spec")
-    }
+    link_directory_with_separate_context(
+        base_vm_image_path_in_host.parent().unwrap(),
+        spec.root_path().join("crun-qemu/image"),
+        spec.mount_label(),
+        bundle_path.join("crun-qemu-vm-image-overlayfs"),
+    )?;
 
     // create overlay image
 

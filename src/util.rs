@@ -25,7 +25,7 @@ pub fn set_file_context(path: impl AsRef<Path>, context: &str) -> io::Result<()>
     Ok(())
 }
 
-/// Expose directory `from` at `to` with the given SELinux `context` recursively applied.
+/// Expose directory `from` at `to` with the given SELinux `context`, if any, recursively applied.
 ///
 /// This does *not* modify the SELinux context of `from` nor of files under `from`.
 ///
@@ -33,7 +33,7 @@ pub fn set_file_context(path: impl AsRef<Path>, context: &str) -> io::Result<()>
 pub fn link_directory_with_separate_context(
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,
-    context: &str,
+    context: Option<&str>,
     private_dir: impl AsRef<Path>,
 ) -> io::Result<()> {
     let upper_dir = private_dir.as_ref().join("upper");
@@ -52,13 +52,16 @@ pub fn link_directory_with_separate_context(
         format!("\"{}\"", mount_option)
     }
 
-    let options = format!(
-        "lowerdir={},upperdir={},workdir={},context={}",
+    let mut options = format!(
+        "lowerdir={},upperdir={},workdir={}",
         escape_path(from.as_ref().to_str().unwrap()),
         escape_path(upper_dir.to_str().unwrap()),
         escape_path(work_dir.to_str().unwrap()),
-        escape_context(context),
     );
+
+    if let Some(context) = context {
+        options = format!("{},context={}", options, escape_context(context));
+    }
 
     if let Err(e) = nix::mount::mount(
         Some("overlay"),
