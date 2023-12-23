@@ -33,15 +33,13 @@ else
     socket=/run/libvirt/libvirt-sock
 fi
 
-# libvirt doesn't let us pass --modcaps=-mknod to virtiofsd (which is necessary
-# since we ourselves don't have that capability and virtiofsd would fail trying
-# to add it), so we tell libvirt to use the /crun-qemu/virtiofsd script below
-
+# libvirt doesn't let us pass --modcaps to virtiofsd (which we use to avoid
+# having virtiofsd unsuccessfully attempt to acquire additional capabilities),
+# so we tell libvirt to use the /crun-qemu/virtiofsd script below.
 cat <<'EOF' >/crun-qemu/virtiofsd
 #!/bin/bash
-/usr/libexec/virtiofsd --modcaps=-mknod "$@"
+/usr/libexec/virtiofsd --modcaps=-mknod:-setfcap "$@"
 EOF
-
 chmod +x /crun-qemu/virtiofsd
 
 # When running under Docker or rootful Podman, passt will realize that it is
