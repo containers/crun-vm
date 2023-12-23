@@ -6,13 +6,13 @@ use std::io::{self, Write};
 use std::path::Path;
 use std::process::Command;
 
-use crate::commands::create::{BlockDevice, VirtiofsMount};
+use crate::commands::create::GuestMount;
 
 pub struct FirstBootConfig<'a> {
     pub hostname: Option<&'a str>,
     pub container_public_key: &'a str,
-    pub block_devices: &'a [BlockDevice],
-    pub virtiofs_mounts: &'a [VirtiofsMount],
+    pub block_devices: &'a [GuestMount],
+    pub virtiofs_mounts: &'a [GuestMount],
 }
 
 impl FirstBootConfig<'_> {

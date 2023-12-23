@@ -7,23 +7,23 @@ use std::io::{self, Write};
 use sysinfo::SystemExt;
 use xml::writer::XmlEvent;
 
-use crate::commands::create::{BlockDevice, CustomOptions, VirtiofsMount};
+use crate::commands::create::{CustomOptions, GuestMount};
 use crate::util::{SpecExt, VmImageInfo};
 
 pub fn set_up_libvirt_domain_xml(
     spec: &oci_spec::runtime::Spec,
     base_vm_image_info: &VmImageInfo,
-    block_devices: &[BlockDevice],
-    virtiofs_mounts: &[VirtiofsMount],
+    block_devices: &[GuestMount],
+    virtiofs_mounts: &[GuestMount],
     custom_options: &CustomOptions,
 ) -> Result<(), Box<dyn Error>> {
     let path = spec.root_path().join("crun-qemu/domain.xml");
 
-    let w = &mut xml::EmitterConfig::new()
+    let mut w = xml::EmitterConfig::new()
         .perform_indent(true)
         .create_writer(File::create(path)?);
 
-    s(w, "domain", &[("type", "kvm")], |w| {
+    s(&mut w, "domain", &[("type", "kvm")], |w| {
         st(w, "name", &[], "domain")?;
 
         se(w, "cpu", &[("mode", "host-model")])?;

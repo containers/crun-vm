@@ -26,12 +26,7 @@ pub fn create(
     global_args: &liboci_cli::GlobalOpts,
     args: &liboci_cli::Create,
 ) -> Result<(), Box<dyn Error>> {
-    let config_path = args
-        .bundle
-        .join("config.json")
-        .to_str()
-        .unwrap()
-        .to_string();
+    let config_path = args.bundle.join("config.json");
 
     let mut spec = oci_spec::runtime::Spec::load(&config_path)?;
     let original_root_path = spec.root_path().clone();
@@ -53,13 +48,7 @@ pub fn create(
     spec.save(&config_path)?;
     spec.save(spec.root_path().join("crun-qemu/config.json"))?; // to aid debugging
 
-    set_up_first_boot_config(
-        &spec,
-        &custom_options,
-        spec.hostname().as_deref(),
-        &block_devices,
-        &virtiofs_mounts,
-    )?;
+    set_up_first_boot_config(&spec, &custom_options, &block_devices, &virtiofs_mounts)?;
 
     set_up_libvirt_domain_xml(
         &spec,
@@ -212,14 +201,14 @@ fn set_up_vm_image(
     Ok(base_vm_image_info)
 }
 
-struct VirtiofsMount {
+struct GuestMount {
     path_in_container: PathBuf,
     path_in_guest: PathBuf,
 }
 
 fn set_up_directory_bind_mounts(
     spec: &mut oci_spec::runtime::Spec,
-) -> Result<Vec<VirtiofsMount>, Box<dyn Error>> {
+) -> Result<Vec<GuestMount>, Box<dyn Error>> {
     const TARGETS_TO_IGNORE: &[&str] = &[
         "/dev",
         "/etc/hostname",
@@ -232,7 +221,7 @@ fn set_up_directory_bind_mounts(
         "/sys/fs/cgroup",
     ];
 
-    let mut directory_bind_mounts: Vec<VirtiofsMount> = vec![];
+    let mut directory_bind_mounts: Vec<GuestMount> = vec![];
     let mut mounts = spec.mounts().clone().unwrap_or_default();
 
     for (i, mount) in mounts.iter_mut().enumerate() {
@@ -258,7 +247,7 @@ fn set_up_directory_bind_mounts(
         // redirect the mount to a path that we control in container
         mount.set_destination(path_in_container.clone());
 
-        directory_bind_mounts.push(VirtiofsMount {
+        directory_bind_mounts.push(GuestMount {
             path_in_container,
             path_in_guest,
         });
@@ -269,15 +258,10 @@ fn set_up_directory_bind_mounts(
     Ok(directory_bind_mounts)
 }
 
-struct BlockDevice {
-    path_in_container: PathBuf,
-    path_in_guest: PathBuf,
-}
-
 fn set_up_block_devices(
     spec: &mut oci_spec::runtime::Spec,
-) -> Result<Vec<BlockDevice>, Box<dyn Error>> {
-    let mut block_devices: Vec<BlockDevice> = vec![];
+) -> Result<Vec<GuestMount>, Box<dyn Error>> {
+    let mut block_devices: Vec<GuestMount> = vec![];
 
     // set up block devices passed in using --device (note that rootless podman will turn those into
     // --mount/--volume instead)
@@ -302,7 +286,7 @@ fn set_up_block_devices(
             makedev(major, minor),
         )?;
 
-        block_devices.push(BlockDevice {
+        block_devices.push(GuestMount {
             path_in_container,
             path_in_guest,
         });
@@ -350,7 +334,7 @@ fn set_up_block_devices(
                 .unwrap(),
         );
 
-        block_devices.push(BlockDevice {
+        block_devices.push(GuestMount {
             path_in_container,
             path_in_guest,
         });
@@ -451,14 +435,13 @@ fn set_up_seccomp_profile(spec: &mut oci_spec::runtime::Spec, is_docker: bool) {
 fn set_up_first_boot_config(
     spec: &oci_spec::runtime::Spec,
     custom_options: &CustomOptions,
-    hostname: Option<&str>,
-    block_devices: &[BlockDevice],
-    virtiofs_mounts: &[VirtiofsMount],
+    block_devices: &[GuestMount],
+    virtiofs_mounts: &[GuestMount],
 ) -> Result<(), Box<dyn Error>> {
     let container_public_key = generate_container_ssh_key_pair(spec)?;
 
     let config = FirstBootConfig {
-        hostname,
+        hostname: spec.hostname().as_deref(),
         container_public_key: &container_public_key,
         block_devices,
         virtiofs_mounts,
