@@ -1,6 +1,8 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-2.0-or-later
 
+trap 'exit 143' SIGTERM
+
 set -o errexit -o pipefail -o nounset
 
 mkdir -p \
@@ -25,7 +27,7 @@ echo 'cgroup_controllers = []' >> /etc/libvirt/qemu.conf
 
 virtlogd --daemon
 
-if command -v virtqemud; then
+if command -v virtqemud >/dev/null; then
     virtqemud --daemon
     socket=/run/libvirt/virtqemud-sock
 else
@@ -59,18 +61,38 @@ chmod +x /crun-qemu/virsh
 
 # launch VM
 
-function __ensure_tty() {
+function __bg_ensure_tty() {
     if [[ -t 0 ]]; then
-        "$@"
+        # stay attach to tty when running in background
+        "$@" <"$(tty)" &
     else
-        # 'virsh console' requires stdin to be a tty
-        script --return --quiet /dev/null --command "${*@Q}"
+        # virsh console requires stdin to be a tty
+        script --return --quiet /dev/null --command "${*@Q}" &
     fi
 }
 
-__ensure_tty virsh \
-    --connect "qemu+unix:///session?socket=$socket" \
-    --quiet \
-    create \
-    /crun-qemu/domain.xml \
-    --console
+virsh=( virsh --connect "qemu+unix:///session?socket=$socket" --quiet )
+
+"${virsh[@]}" define /crun-qemu/domain.xml
+
+# trigger graceful shutdown and wait for VM to terminate
+function __shutdown() {
+    (
+        set -o errexit -o pipefail -o nounset
+        "${virsh[@]}" shutdown domain 2>/dev/null
+        while ! "${virsh[@]}" domstate domain 2>/dev/null |
+            grep --quiet 'shut off'; do
+            sleep 0.1
+            # if we caught the VM booting, we may need to signal shutdown again
+            "${virsh[@]}" shutdown domain 2>/dev/null
+        done
+    )
+}
+
+# We're running as PID 1, so if we run virsh in the foreground, SIGTERM will not
+# be propagated to it. We thus run it in the background but keep our tty
+# attached to its stdin. We then set up a trap that attempts to gracefully
+# terminate the VM on SIGTERM, and finally block waiting for virsh to exit.
+__bg_ensure_tty "${virsh[@]}" start domain --console
+trap '__shutdown || true; exit 143' SIGTERM
+wait
