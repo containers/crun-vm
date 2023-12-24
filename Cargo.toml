@@ -11,7 +11,7 @@ default-features = false
 features = ["cargo", "derive", "std"]
 
 [dependencies.lazy_static]
-version = "1.0"
+version = "1.1"
 default-features = false
 
 [dependencies.liboci-cli]
