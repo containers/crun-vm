@@ -1,19 +1,20 @@
-# Example: Using `crun-qemu` in Kubernetes
+# 3. Using `crun-qemu` as a Kuberntes runtime
 
-It is possible to use `crun-qemu` to run VMs as regular pods in a [Kubernetes]
-cluster.
+It is possible to use `crun-qemu` as a [Kubernetes] runtime, allowing you to run
+VMs as regular pods.
 
 ## Preparation
 
-To enable the `crun-qemu` on a cluster, follow these steps:
+To enable `crun-qemu` on a Kubernetes cluster, follow these steps:
 
-1. Ensure that the cluster is using the [CRI-O] container runtime. Refer to
-   Kubernetes' docs on [container runtimes].
+1. Ensure that the cluster is using the [CRI-O] container runtime. Refer to the
+   Kubernetes docs on [container runtimes].
 
 2. Install `crun-qemu` on all cluster nodes where pods may be scheduled. Refer
-   to the [Installing] section of the README.
+   to the [installation instructions].
 
-3. Append the following to `/etc/crio/crio.conf`:
+3. Append the following to `/etc/crio/crio.conf` (adjust the `runtime_path` if
+   necessary):
 
    ```toml
    [crio.runtime.runtimes.crun-qemu]
@@ -30,7 +31,11 @@ To enable the `crun-qemu` on a cluster, follow these steps:
    handler: crun-qemu
    ```
 
-## Using it
+## Using the runtime
+
+> Under [examples/minikube] you can find a script that sets up a local minikube
+> Kubernetes cluster with `crun-qemu` available as a runtime. You can use it to
+> easily try out the examples below.
 
 From then on, you can run VM images packaged in container images by creating
 pods that use this `RuntimeClass`:
@@ -63,8 +68,8 @@ $ kubectl logs my-vm
 
 Assuming the VM supports cloud-init or Ignition, you can also SSH into it using
 `kubectl exec`, with the caveat that the user to SSH as is passed in place of
-the command (this is the same behavior as with `podman exec` or `docker exec`,
-see [SSH'ing into the VM] in the README):
+the command (this is the same behavior as with `podman exec` or `docker exec`;
+see [SSH'ing into the VM]):
 
 ```console
 $ kubectl exec my-vm -- fedora whoami
@@ -142,36 +147,10 @@ spec:
   runtimeClassName: crun-qemu
 ```
 
-## minikube demo
-
-You can use the `./minikube-start.sh` script in this directory to easily create
-a local [minikube] Kubernetes cluster configured as per the steps above (note
-that the script will also configure `kubectl` to point at the minikube
-cluster):
-
-```console
-$ ./minikube-start.sh
-   Compiling crun-qemu v0.0.0 (/home/afaria/repos/crun-qemu)
-    Finished dev [unoptimized + debuginfo] target(s) in 1.38s
-😄  [crun-qemu-example] minikube v1.32.0 on Fedora 39
-[...]
-🏄  Done! kubectl is now configured to use "crun-qemu-example" cluster and "default" namespace by default
-runtimeclass.node.k8s.io/crun-qemu created
-```
-
-Try creating the pod defined in the section above and running the `kubectl`
-commands described there.
-
-Once you're done, you can delete the cluster with:
-
-```console
-$ minikube -p crun-qemu-example delete
-```
-
 [container runtimes]: https://kubernetes.io/docs/setup/production-environment/container-runtimes/#cri-o
 [CRI-O]: https://cri-o.io/
-[Installing]: /README.md#installing
+[examples/minikube]: /examples/minikube
+[installation instructions]: 1-installing.md
 [Kubernetes]: https://kubernetes.io/
 [`localhost:8000`]: http://localhost:8000/
-[minikube]: https://minikube.sigs.k8s.io/
-[SSH'ing into the VM]: /README.md#sshing-into-the-vm
+[SSH'ing into the VM]: 2-podman-docker.md#sshing-into-the-vm
