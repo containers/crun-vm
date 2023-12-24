@@ -24,7 +24,7 @@ default-features = false
 features = ["fs", "mount"]
 
 [dependencies.num_cpus]
-version = "1.16"
+version = "1.0"
 default-features = false
 
 [dependencies.oci-spec]
