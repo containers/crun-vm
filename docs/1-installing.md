@@ -1,8 +1,8 @@
-# 1. Installing `crun-qemu`
+# 1. Installing crun-qemu
 
 ## Build and install from source (on Fedora)
 
-1. Install `crun-qemu`'s runtime dependencies:
+1. Install crun-qemu's runtime dependencies:
 
    ```console
    $ dnf install bash coreutils crun genisoimage libselinux libvirt-client libvirt-daemon-driver-qemu libvirt-daemon-log qemu-img qemu-system-x86-core shadow-utils util-linux virtiofsd
@@ -14,7 +14,7 @@
    $ dnf install cargo
    ```
 
-3. Build `crun-qemu`:
+3. Build crun-qemu:
 
    ```console
    $ cargo build
@@ -67,7 +67,7 @@
        $ service docker reload
        ```
 
-With Podman, it is possible to use `crun-qemu` without installing it, *i.e.*,
+With Podman, it is possible to use crun-qemu without installing it, *i.e.*,
 performing only steps 1–3 above. In this case, instead of setting the runtime
 with `--runtime crun-qemu`, specify an absolute path to the runtime binary:
 `--runtime "$PWD"/target/debug/crun-qemu`.

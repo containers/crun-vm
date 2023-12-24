@@ -1,7 +1,7 @@
-# Example: Minikube cluster with `crun-qemu` available as a runtime
+# Example: Minikube cluster with crun-qemu available as a runtime
 
 You can use the `./minikube-start.sh` script in this directory to create a local
-[minikube] Kubernetes cluster with `crun-qemu` available as a runtime (note that
+[minikube] Kubernetes cluster with crun-qemu available as a runtime (note that
 this also points `kubectl` at the minikube cluster):
 
 ```console
@@ -14,7 +14,7 @@ $ ./minikube-start.sh
 runtimeclass.node.k8s.io/crun-qemu created
 ```
 
-Try going through the examples at [Using `crun-qemu` as a Kubernetes runtime].
+Try going through the examples at [Using crun-qemu as a Kubernetes runtime].
 
 Once you're done, you can delete the cluster with:
 
@@ -23,4 +23,4 @@ $ minikube -p crun-qemu-example delete
 ```
 
 [minikube]: https://minikube.sigs.k8s.io/
-[Using `crun-qemu` as a Kubernetes runtime]: /docs/3-kubernetes.md
+[Using crun-qemu as a Kubernetes runtime]: /docs/3-kubernetes.md

@@ -1,6 +1,6 @@
-# 2. Using `crun-qemu` as a Podman or Docker runtime
+# 2. Using crun-qemu as a Podman or Docker runtime
 
-Here we overview some of the major features provided by `crun-qemu`.
+Here we overview some of the major features provided by crun-qemu.
 
 To run the examples below using Docker instead of Podman, you must additionally
 pass `--security-opt label=disable` to docker-run. Other than that, and unless
@@ -77,7 +77,7 @@ $ podman run \
 
 ### From VM image files packaged into container images
 
-`crun-qemu` also works with container images that contain a VM image file with
+crun-qemu also works with container images that contain a VM image file with
 any name under `/` or under `/disk/`. No other files may exist in those
 directories. Containers built for use as [KubeVirt `containerDisk`s] follow this
 convention, so you can use those here:
@@ -177,7 +177,7 @@ no command is specified, a login shell is initiated. In this case, you probably
 also want to pass flags `-it` to podman-exec.
 
 If you actually just want to exec into the container in which the VM is running
-(probably to debug some problem with `crun-qemu` itself), pass in `-` as the
+(probably to debug some problem with crun-qemu itself), pass in `-` as the
 username.
 
 ## Port forwarding

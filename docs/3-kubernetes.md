@@ -1,17 +1,17 @@
-# 3. Using `crun-qemu` as a Kubernetes runtime
+# 3. Using crun-qemu as a Kubernetes runtime
 
-It is possible to use `crun-qemu` as a [Kubernetes] runtime, allowing you to run
+It is possible to use crun-qemu as a [Kubernetes] runtime, allowing you to run
 VMs as regular pods.
 
 ## Preparation
 
-To enable `crun-qemu` on a Kubernetes cluster, follow these steps:
+To enable crun-qemu on a Kubernetes cluster, follow these steps:
 
 1. Ensure that the cluster is using the [CRI-O] container runtime. Refer to the
    Kubernetes docs on [container runtimes].
 
-2. Install `crun-qemu` on all cluster nodes where pods may be scheduled. Refer
-   to the [installation instructions].
+2. Install crun-qemu on all cluster nodes where pods may be scheduled. Refer to
+   the [installation instructions].
 
 3. Append the following to `/etc/crio/crio.conf` (adjust the `runtime_path` if
    necessary):
@@ -21,7 +21,7 @@ To enable `crun-qemu` on a Kubernetes cluster, follow these steps:
    runtime_path = "/usr/local/bin/crun-qemu"
    ```
 
-4. Create a `RuntimeClass` that references `crun-qemu`:
+4. Create a `RuntimeClass` that references crun-qemu:
 
    ```yaml
    apiVersion: node.k8s.io/v1
@@ -34,7 +34,7 @@ To enable `crun-qemu` on a Kubernetes cluster, follow these steps:
 ## Using the runtime
 
 > Under [examples/minikube] you can find a script that sets up a local minikube
-> Kubernetes cluster with `crun-qemu` available as a runtime. You can use it to
+> Kubernetes cluster with crun-qemu available as a runtime. You can use it to
 > easily try out the examples below.
 
 From then on, you can run VM images packaged in container images by creating
@@ -107,10 +107,10 @@ $ curl localhost:8000
 
 ### cloud-init and Ignition
 
-When using `crun-qemu` as a Kubernetes runtime, paths given to `--cloud-init`
-and `--ignition` are interpreted in the context of the container/VM, instead of
-the host. This means that config files can be retrieved from mounted volumes.
-For instance, you could store your cloud-init config in a `ConfigMap`:
+When using crun-qemu as a Kubernetes runtime, paths given to `--cloud-init` and
+`--ignition` are interpreted in the context of the container/VM, instead of the
+host. This means that config files can be retrieved from mounted volumes. For
+instance, you could store your cloud-init config in a `ConfigMap`:
 
 ```yaml
 apiVersion: v1
