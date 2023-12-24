@@ -10,15 +10,15 @@ virtualization technologies like libvirt.
 
   - Works as a runtime for **rootless Podman**, **rootful Podman**, **Docker**,
     and **Kubernetes**.
-  - Launching VMs with **`podman run`**/**`docker run`** from VM **image files**
-    or VM image files packaged into **container images**.
+  - Launching VMs from VM **image files** present on the host or packaged into
+    **container images**.
   - Controlling VM CPU and memory allocation.
   - Providing **cloud-init** and **Ignition** configurations to VMs.
   - **Mounting directories** into VMs.
   - Passing **block devices** through to VMs.
   - Passing **vfio-pci** and **mediated vfio-pci** devices through to VMs.
   - **Forwarding ports** from the host to VMs.
-  - **`podman exec`**/**`docker exec`'ing** into VMs.
+  - **`podman exec`**/**`docker exec`**/**`kubectl exec`'ing** into VMs.
 
 ### Documentation
 
