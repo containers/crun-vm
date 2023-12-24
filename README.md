@@ -135,11 +135,11 @@ podman-run, in which case you won't be able to interact with the VM but can
 still observe its console. Note that pressing `ctrl-]` will have no effect, but
 you can always use the following command to terminate the VM:
 
-> For this command to work with Docker, you must omit the `--time=0` option and
-> replace the `--latest` flag with the container's name or ID.
+> For this command to work with Docker, you must replace the `--latest` flag
+> with the container's name or ID.
 
 ```container
-$ podman rm --force --time=0 --latest
+$ podman stop --latest
 ```
 
 #### From VM image files packaged into container images
