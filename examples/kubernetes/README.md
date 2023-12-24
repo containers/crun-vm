@@ -65,7 +65,7 @@ $ kubectl exec -it my-vm -- fedora
 ```
 
 The pod/VM defined above actually exposes an HTTP server on port 80. To talk to
-it, we first must first forward a local port to the pod/VM:
+it, we must first forward a local port to the pod/VM:
 
 ```console
 $ kubectl port-forward my-vm 8000:80
@@ -73,8 +73,8 @@ Forwarding from 127.0.0.1:8000 -> 80
 Forwarding from [::1]:8000 -> 80
 ```
 
-With this command running, navigate to `localhost:8000` on your browser, or run
-the following on a second terminal:
+With this command running, navigate to [`localhost:8000`] on your browser, or
+run the following on a second terminal:
 
 ```console
 $ curl localhost:8000
@@ -116,7 +116,8 @@ $ minikube -p crun-qemu-example delete
 
 [container runtimes]: https://kubernetes.io/docs/setup/production-environment/container-runtimes/#cri-o
 [CRI-O]: https://cri-o.io/
-[Installing]: ../../README#installing
+[Installing]: /README.md#installing
 [Kubernetes]: https://kubernetes.io/
+[`localhost:8000`]: http://localhost:8000/
 [minikube]: https://minikube.sigs.k8s.io/
-[SSH'ing into the VM]: ../../README#sshing-into-the-vm
+[SSH'ing into the VM]: /README.md#sshing-into-the-vm
