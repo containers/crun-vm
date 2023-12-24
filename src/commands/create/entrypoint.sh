@@ -50,6 +50,13 @@ chmod +x /crun-qemu/virtiofsd
 mkdir -p /run/libvirt/qemu/passt
 chmod o+w /run/libvirt/qemu/passt
 
+# add debugging helper script to run virsh
+cat <<EOF >/crun-qemu/virsh
+#!/bin/bash
+virsh --connect "qemu+unix:///session?socket=$socket" "\$@"
+EOF
+chmod +x /crun-qemu/virsh
+
 # launch VM
 
 function __ensure_tty() {
