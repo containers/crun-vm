@@ -1,15 +1,14 @@
-# The `crun-qemu` runtime
+# The `crun-qemu` OCI Runtime
 
 This is an **experimental** [OCI Runtime] that enables [Podman], [Docker], and
 [Kubernetes] to run Virtual Machine (VM) images. The objective is to make
 running VMs (in simple configurations) as easy as running containers, using
-standard container tooling and without the need for in-depth knowledge of
-virtualization technologies like libvirt.
+standard container tooling and without the need for in-depth knowledge on
+virtualization technologies like libvirt or KubeVirt.
 
 ### Major features
 
-  - Works as a runtime for **rootless Podman**, **rootful Podman**, **Docker**,
-    and **Kubernetes**.
+  - Works as a runtime for **Podman**, **Docker**, and **Kubernetes**.
   - Launching VMs from VM **image files** present on the host or packaged into
     **container images**.
   - Controlling VM CPU and memory allocation.
