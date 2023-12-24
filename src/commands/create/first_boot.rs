@@ -81,18 +81,20 @@ impl FirstBootConfig<'_> {
 
         // adjust mounts
 
-        let mounts = match user_data_mapping
-            .entry("mounts".into())
-            .or_insert_with(|| serde_yaml::Value::Sequence(vec![]))
-        {
-            serde_yaml::Value::Sequence(mounts) => mounts,
-            _ => return Err(io::Error::other("cloud-init: invalid user-data file").into()),
-        };
+        if !self.virtiofs_mounts.is_empty() {
+            let mounts: &mut Vec<serde_yaml::Value> = match user_data_mapping
+                .entry("mounts".into())
+                .or_insert_with(|| serde_yaml::Value::Sequence(vec![]))
+            {
+                serde_yaml::Value::Sequence(mounts) => mounts,
+                _ => return Err(io::Error::other("cloud-init: invalid user-data file").into()),
+            };
 
-        for (i, mount) in self.virtiofs_mounts.iter().enumerate() {
-            let tag = format!("virtiofs-{}", i);
-            let path = mount.path_in_guest.to_str().unwrap();
-            mounts.push(vec![&tag, path, "virtiofs", "defaults", "0", "0"].into());
+            for (i, mount) in self.virtiofs_mounts.iter().enumerate() {
+                let tag = format!("virtiofs-{}", i);
+                let path = mount.path_in_guest.to_str().unwrap();
+                mounts.push(vec![&tag, path, "virtiofs", "defaults", "0", "0"].into());
+            }
         }
 
         // adjust hostname
@@ -117,34 +119,36 @@ impl FirstBootConfig<'_> {
 
         // create block device symlinks
 
-        let runcmd = match user_data_mapping
-            .entry("runcmd".into())
-            .or_insert_with(|| serde_yaml::Value::Sequence(vec![]))
-        {
-            serde_yaml::Value::Sequence(cmds) => cmds,
-            _ => return Err(io::Error::other("cloud-init: invalid user-data file").into()),
-        };
-
-        for (i, dev) in self.block_devices.iter().enumerate() {
-            let parent = match dev.path_in_guest.parent() {
-                Some(path) if path.to_str() != Some("") => Some(path),
-                _ => None,
+        if !self.block_devices.is_empty() {
+            let runcmd = match user_data_mapping
+                .entry("runcmd".into())
+                .or_insert_with(|| serde_yaml::Value::Sequence(vec![]))
+            {
+                serde_yaml::Value::Sequence(cmds) => cmds,
+                _ => return Err(io::Error::other("cloud-init: invalid user-data file").into()),
             };
 
-            if let Some(parent) = parent {
+            for (i, dev) in self.block_devices.iter().enumerate() {
+                let parent = match dev.path_in_guest.parent() {
+                    Some(path) if path.to_str() != Some("") => Some(path),
+                    _ => None,
+                };
+
+                if let Some(parent) = parent {
+                    runcmd.push(serde_yaml::Value::Sequence(vec![
+                        "mkdir".into(),
+                        "-p".into(),
+                        parent.to_str().expect("path is utf-8").into(),
+                    ]));
+                }
+
                 runcmd.push(serde_yaml::Value::Sequence(vec![
-                    "mkdir".into(),
-                    "-p".into(),
-                    parent.to_str().expect("path is utf-8").into(),
+                    "ln".into(),
+                    "--symbolic".into(),
+                    format!("/dev/disk/by-id/virtio-crun-qemu-bdev-{i}").into(),
+                    dev.path_in_guest.to_str().expect("path is utf-8").into(),
                 ]));
             }
-
-            runcmd.push(serde_yaml::Value::Sequence(vec![
-                "ln".into(),
-                "--symbolic".into(),
-                format!("/dev/disk/by-id/virtio-crun-qemu-bdev-{i}").into(),
-                dev.path_in_guest.to_str().expect("path is utf-8").into(),
-            ]));
         }
 
         // generate iso
