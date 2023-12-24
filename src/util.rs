@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use std::ffi::{c_char, CString};
-use std::fs;
+use std::fs::{self, OpenOptions, Permissions};
 use std::io;
 use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -25,21 +26,57 @@ pub fn set_file_context(path: impl AsRef<Path>, context: &str) -> io::Result<()>
     Ok(())
 }
 
+pub fn bind_mount_file(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Result<()> {
+    // ensure target exists
+
+    if let Some(parent) = to.as_ref().parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(to.as_ref())?;
+
+    // bind mount file
+
+    if let Err(e) = nix::mount::mount(
+        Some(from.as_ref()),
+        to.as_ref(),
+        Option::<&str>::None,
+        MsFlags::MS_BIND,
+        Option::<&str>::None,
+    ) {
+        return Err(io::Error::other(format!(
+            "mount({:?}, {:?}, NULL, MS_BIND, NULL) failed: {}",
+            from.as_ref().to_str().unwrap(),
+            to.as_ref().to_str().unwrap(),
+            e
+        )));
+    }
+
+    Ok(())
+}
+
 /// Expose directory `from` at `to` with the given SELinux `context`, if any, recursively applied.
 ///
 /// This does *not* modify the SELinux context of `from` nor of files under `from`.
 ///
+/// If `propagate_changes` is true, `private_dir` must belong to the same file system as `from` and
+/// be a separate subtree.
+///
 /// TODO: Is this a neat relabeling trick or simply a bad hack?
-pub fn link_directory_with_separate_context(
+pub fn bind_mount_dir_with_different_context(
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,
     context: Option<&str>,
+    propagate_changes: bool,
     private_dir: impl AsRef<Path>,
 ) -> io::Result<()> {
-    let upper_dir = private_dir.as_ref().join("upper");
+    let layer_dir = private_dir.as_ref().join("layer");
     let work_dir = private_dir.as_ref().join("work");
 
-    fs::create_dir_all(&upper_dir)?;
+    fs::create_dir_all(&layer_dir)?;
     fs::create_dir_all(&work_dir)?;
     fs::create_dir_all(to.as_ref())?;
 
@@ -52,9 +89,14 @@ pub fn link_directory_with_separate_context(
         format!("\"{}\"", mount_option)
     }
 
+    let (lower_dir, upper_dir) = match propagate_changes {
+        true => (layer_dir.as_path(), from.as_ref()),
+        false => (from.as_ref(), layer_dir.as_path()),
+    };
+
     let mut options = format!(
         "lowerdir={},upperdir={},workdir={}",
-        escape_path(from.as_ref().to_str().unwrap()),
+        escape_path(lower_dir.to_str().unwrap()),
         escape_path(upper_dir.to_str().unwrap()),
         escape_path(work_dir.to_str().unwrap()),
     );
@@ -77,6 +119,10 @@ pub fn link_directory_with_separate_context(
             e
         )));
     }
+
+    // Make any necessary manual cleanup a bit easier by ensuring the workdir is accessible to the
+    // user that Podman is running under.
+    fs::set_permissions(work_dir.join("work"), Permissions::from_mode(0o700))?;
 
     Ok(())
 }

@@ -29,7 +29,7 @@ $ podman run \
     --runtime crun-qemu \
     -it --rm \
     --rootfs my-vm-image \
-    ""
+    ""  # unused, but must specify command
 ```
 
 The VM console should take over your terminal. To abort the VM, press `ctrl-]`.
@@ -59,6 +59,22 @@ you can always use the following command to terminate the VM:
 $ podman stop --latest
 ```
 
+Changes made by the VM to its image are by default not persisted in the original
+image file. This can be changed by passing in the non-standard option
+`--persist-changes` *after* the `--rootfs` option:
+
+```console
+$ podman run \
+    --runtime crun-qemu \
+    -it --rm \
+    --rootfs my-vm-image \
+    --persist-changes
+```
+
+> :warning: When using `--persist-changes`, make sure that the image file is
+> never simultaneously used by another process or VM, otherwise **data
+> corruption may occur**.
+
 ### From VM image files packaged into container images
 
 `crun-qemu` also works with container images that contain a VM image file with
@@ -71,12 +87,15 @@ $ podman run \
     --runtime crun-qemu \
     -it --rm \
     quay.io/containerdisks/fedora:39 \
-    ""
+    ""  # unused, but must specify command because container image does not
 ```
 
 You can also use `util/package-vm-image.sh` to easily package a VM image into a
 container image, and `util/extract-vm-image.sh` to extract a VM image contained
 in a container image.
+
+Note that flag `--persist-changes` has no effect when running VMs from container
+images.
 
 ## First-boot customization
 

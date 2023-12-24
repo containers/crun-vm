@@ -20,8 +20,8 @@ use crate::commands::create::first_boot::FirstBootConfig;
 use crate::commands::create::runtime_env::RuntimeEnv;
 use crate::crun::crun_create;
 use crate::util::{
-    create_overlay_vm_image, find_single_file_in_dirs, link_directory_with_separate_context,
-    set_file_context, SpecExt, VmImageInfo,
+    bind_mount_dir_with_different_context, bind_mount_file, create_overlay_vm_image,
+    find_single_file_in_dirs, set_file_context, SpecExt, VmImageInfo,
 };
 
 pub fn create(
@@ -37,7 +37,8 @@ pub fn create(
     let custom_options = CustomOptions::from_spec(&spec, runtime_env)?;
 
     set_up_container_root(&mut spec, &args.bundle)?;
-    let base_vm_image_info = set_up_vm_image(&spec, &args.bundle, &original_root_path)?;
+    let base_vm_image_info =
+        set_up_vm_image(&spec, &args.bundle, &original_root_path, &custom_options)?;
 
     let virtiofs_mounts = set_up_directory_bind_mounts(&mut spec)?;
     let block_devices = set_up_block_devices(&mut spec)?;
@@ -113,6 +114,7 @@ fn set_up_vm_image(
     spec: &oci_spec::runtime::Spec,
     bundle_path: &Path,
     original_root_path: &Path,
+    custom_options: &CustomOptions,
 ) -> Result<VmImageInfo, Box<dyn Error>> {
     // where inside the container to look for the VM image
     const VM_IMAGE_SEARCH_PATHS: [&str; 2] = ["./", "disk/"];
@@ -120,33 +122,75 @@ fn set_up_vm_image(
     // docker may add these files to the root of the container
     const FILES_TO_IGNORE: [&str; 2] = [".dockerinit", ".dockerenv"];
 
-    let base_vm_image_path_in_host = find_single_file_in_dirs(
+    let vm_image_path_in_host = find_single_file_in_dirs(
         VM_IMAGE_SEARCH_PATHS.map(|p| original_root_path.join(p)),
         &FILES_TO_IGNORE.map(|f| original_root_path.join(f)),
     )?;
 
     // mount user-provided VM image file into container
 
-    link_directory_with_separate_context(
-        base_vm_image_path_in_host.parent().unwrap(),
-        spec.root_path().join("crun-qemu/image"),
+    let mirror_vm_image_path_in_container =
+        Path::new("crun-qemu/image").join(vm_image_path_in_host.file_name().unwrap());
+    let mirror_vm_image_path_in_host = spec.root_path().join(&mirror_vm_image_path_in_container);
+    let mirror_vm_image_path_in_container = Path::new("/").join(mirror_vm_image_path_in_container);
+
+    let private_dir = if custom_options.persist_changes {
+        let vm_image_dir_path = vm_image_path_in_host.parent().unwrap();
+        let vm_image_dir_name = vm_image_dir_path.file_name().unwrap();
+
+        let overlay_private_dir_name =
+            format!(".crun-qemu.{}.tmp", vm_image_dir_name.to_str().unwrap());
+        let overlay_private_dir_path = vm_image_dir_path
+            .parent()
+            .unwrap()
+            .join(overlay_private_dir_name);
+
+        overlay_private_dir_path
+    } else {
+        bundle_path.join("crun-qemu-vm-image-overlayfs")
+    };
+
+    // We may need to change the VM image context to actually be able to access it, but we don't
+    // want to change the user's original image file and also don't want to do a full data copy, so
+    // we use an overlayfs mount, which allows us to expose the same file with a different context.
+    //
+    // TODO: Clean up `private_dir` when VM is terminated (would be best-effort, but better than
+    // nothing).
+    bind_mount_dir_with_different_context(
+        vm_image_path_in_host.parent().unwrap(),
+        mirror_vm_image_path_in_host.parent().unwrap(),
         spec.mount_label(),
-        bundle_path.join("crun-qemu-vm-image-overlayfs"),
+        custom_options.persist_changes,
+        private_dir,
     )?;
 
-    // create overlay image
+    let mut vm_image_info = VmImageInfo::of(&mirror_vm_image_path_in_host)?;
 
-    let overlay_vm_image_path_in_host = spec.root_path().join("crun-qemu/image-overlay.qcow2");
+    if custom_options.persist_changes {
+        // We want to propagate writes but not removal, so that the user's file isn't deleted by
+        // Podman on cleanup, so we bind mount it on top of itself.
 
-    let base_vm_image_path_in_container =
-        Path::new("/crun-qemu/image").join(base_vm_image_path_in_host.file_name().unwrap());
+        bind_mount_file(&mirror_vm_image_path_in_host, &mirror_vm_image_path_in_host)?;
 
-    let mut base_vm_image_info = VmImageInfo::of(&base_vm_image_path_in_host)?;
-    base_vm_image_info.path = base_vm_image_path_in_container;
+        vm_image_info.path = mirror_vm_image_path_in_container;
+    } else {
+        // The overlayfs mount already isolates the user's original image file from writes, but to
+        // ensure that we get copy-on-write and page cache sharing even when the underlying file
+        // system doesn't support reflinks, we create a qcow2 overlay and use that as the image.
 
-    create_overlay_vm_image(&overlay_vm_image_path_in_host, &base_vm_image_info)?;
+        let overlay_vm_image_path_in_container = PathBuf::from("crun-qemu/image-overlay.qcow2");
+        let overlay_vm_image_path_in_host =
+            spec.root_path().join(&overlay_vm_image_path_in_container);
+        let overlay_vm_image_path_in_container =
+            Path::new("/").join(overlay_vm_image_path_in_container);
 
-    Ok(base_vm_image_info)
+        vm_image_info.path = mirror_vm_image_path_in_container;
+        create_overlay_vm_image(&overlay_vm_image_path_in_host, &vm_image_info)?;
+
+        vm_image_info.path = overlay_vm_image_path_in_container;
+    }
+
+    Ok(vm_image_info)
 }
 
 struct GuestMount {

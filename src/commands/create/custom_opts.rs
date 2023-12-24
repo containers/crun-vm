@@ -94,6 +94,9 @@ impl VfioPciMdevUuid {
 #[derive(clap::Parser, Debug)]
 struct CustomOptionsRaw {
     #[clap(long)]
+    persist_changes: bool,
+
+    #[clap(long)]
     cloud_init: Option<PathBuf>,
 
     #[clap(long)]
@@ -108,6 +111,7 @@ struct CustomOptionsRaw {
 
 #[derive(Debug)]
 pub struct CustomOptions {
+    pub persist_changes: bool,
     pub cloud_init: Option<PathBuf>,
     pub ignition: Option<PathBuf>,
     pub vfio_pci: Vec<VfioPciAddress>,
@@ -193,6 +197,7 @@ impl CustomOptions {
         }
 
         let options = CustomOptions {
+            persist_changes: options.persist_changes,
             cloud_init: options.cloud_init,
             ignition: options.ignition,
             vfio_pci: options

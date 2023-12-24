@@ -13,7 +13,7 @@ use crate::util::{SpecExt, VmImageInfo};
 
 pub fn set_up_libvirt_domain_xml(
     spec: &oci_spec::runtime::Spec,
-    base_vm_image_info: &VmImageInfo,
+    vm_image_info: &VmImageInfo,
     block_devices: &[GuestMount],
     virtiofs_mounts: &[GuestMount],
     custom_options: &CustomOptions,
@@ -83,18 +83,16 @@ pub fn set_up_libvirt_domain_xml(
 
             s(w, "disk", &[("type", "file"), ("device", "disk")], |w| {
                 se(w, "target", &[("dev", &next_dev_name()), ("bus", "virtio")])?;
-                se(w, "driver", &[("name", "qemu"), ("type", "qcow2")])?;
-                se(w, "source", &[("file", "/crun-qemu/image-overlay.qcow2")])?;
-                s(w, "backingStore", &[("type", "file")], |w| {
-                    se(w, "format", &[("type", &base_vm_image_info.format)])?;
-                    se(
-                        w,
-                        "source",
-                        &[("file", base_vm_image_info.path.to_str().unwrap())],
-                    )?;
-                    se(w, "backingStore", &[])?;
-                    Ok(())
-                })?;
+                se(
+                    w,
+                    "driver",
+                    &[("name", "qemu"), ("type", &vm_image_info.format)],
+                )?;
+                se(
+                    w,
+                    "source",
+                    &[("file", vm_image_info.path.to_str().unwrap())],
+                )?;
                 Ok(())
             })?;
 
