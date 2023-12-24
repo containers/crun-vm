@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+mod custom_opts;
 mod domain;
 mod first_boot;
 
 use std::error::Error;
 use std::fs::{self, Permissions};
 use std::io;
-use std::iter;
 use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use clap::Parser;
 use nix::sys::stat::{major, makedev, minor, mknod, Mode, SFlag};
 
+use crate::commands::create::custom_opts::CustomOptions;
 use crate::commands::create::domain::set_up_libvirt_domain_xml;
 use crate::commands::create::first_boot::FirstBootConfig;
 use crate::crun::crun_create;
@@ -61,60 +61,6 @@ pub fn create(
     crun_create(global_args, args)?; // actually create container
 
     Ok(())
-}
-
-#[derive(clap::Parser, Debug)]
-struct CustomOptions {
-    #[clap(long)]
-    cloud_init: Option<PathBuf>,
-
-    #[clap(long)]
-    ignition: Option<PathBuf>,
-
-    #[clap(long)]
-    vfio_pci_mdev: Vec<PathBuf>,
-}
-
-impl CustomOptions {
-    pub fn from_spec(spec: &oci_spec::runtime::Spec, is_docker: bool) -> io::Result<Self> {
-        let args = spec
-            .process()
-            .as_ref()
-            .unwrap()
-            .args()
-            .iter()
-            .flatten()
-            .filter(|arg| !arg.trim().is_empty());
-
-        // TODO: We currently assume that no entrypoint is given (either by being set by in the
-        // container image or through --entrypoint). Must somehow find whether the first arg is the
-        // entrypoint and ignore it in that case.
-        let options =
-            Self::parse_from(iter::once(&"podman run ... <image>".to_string()).chain(args));
-
-        if is_docker {
-            // Unlike Podman, Docker doesn't run the runtime with the same working directory as the
-            // process that ran `docker`, so we require these paths to be absolute.
-            //
-            // TODO: There must be a better way...
-
-            fn any_is_relative(iter: impl IntoIterator<Item = impl AsRef<Path>>) -> bool {
-                iter.into_iter().any(|p| p.as_ref().is_relative())
-            }
-
-            if any_is_relative(&options.cloud_init)
-                || any_is_relative(&options.ignition)
-                || any_is_relative(&options.vfio_pci_mdev)
-            {
-                return Err(io::Error::other(concat!(
-                    "paths specified using --cloud-init, --ignition, or --vfio-pci-mdev must be",
-                    " absolute when using Docker",
-                )));
-            }
-        }
-
-        Ok(options)
-    }
 }
 
 fn set_up_container_root(

@@ -10,6 +10,10 @@ version = "4.0"
 default-features = false
 features = ["cargo", "derive", "std"]
 
+[dependencies.lazy_static]
+version = "1.0"
+default-features = false
+
 [dependencies.liboci-cli]
 version = "0.3.0"
 default-features = false
@@ -27,6 +31,11 @@ default-features = false
 version = "0.6.0"
 default-features = false
 features = ["runtime"]
+
+[dependencies.regex]
+version = "1.0"
+default-features = false
+features = ["std"]
 
 [dependencies.serde]
 version = "1.0"

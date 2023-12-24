@@ -327,12 +327,24 @@ $ podman run \
 You can also pass them in as bind mounts using the `-v`/`--volume` or `--mount`
 flags.
 
-#### Mediated (mdev) vfio-pci devices
+#### vfio-pci devices
 
-Mediated vfio-pci devices (such as vGPUs) can be passed through to the VM by
-specifying the non-standard `--vfio-pci-mdev` option with a path to the mdev's
-sysfs directory (this example assumes that the corresponding VFIO device under
-`/dev/vfio/` is accessible to the current user):
+vfio-pci devices can be passed through to the VM by specifying the non-standard
+`--vfio-pci` option with a path to the device's sysfs directory (this example
+assumes that the corresponding VFIO device under `/dev/vfio/` is accessible to
+the current user):
+
+```console
+$ podman run \
+    --runtime crun-qemu \
+    -it --rm \
+    quay.io/containerdisks/fedora:39 \
+    --vfio-pci /sys/bus/pci/devices/0000:00:01.0
+```
+
+In turn, mediated (mdev) vfio-pci devices (such as vGPUs) can be passed through
+with the `--vfio-pci-mdev` option, specifying a path to the mdev's sysfs
+directory:
 
 ```console
 $ podman run \

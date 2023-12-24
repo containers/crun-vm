@@ -2,12 +2,13 @@
 
 use std::error::Error;
 use std::fs::File;
-use std::io::{self, Write};
+use std::io::Write;
 
 use sysinfo::SystemExt;
 use xml::writer::XmlEvent;
 
-use crate::commands::create::{CustomOptions, GuestMount};
+use crate::commands::create::custom_opts::{CustomOptions, VfioPciMdevUuid};
+use crate::commands::create::GuestMount;
 use crate::util::{SpecExt, VmImageInfo};
 
 pub fn set_up_libvirt_domain_xml(
@@ -144,23 +145,29 @@ pub fn set_up_libvirt_domain_xml(
                 })?;
             }
 
-            // TODO: Check if these are reasonably paths to the sysfs dir for a PCI mdev device.
-            // TODO: Avoid all the unwrap()s.
-            let vfio_pci_mdev_uuids: Vec<_> = custom_options
-                .vfio_pci_mdev
-                .iter()
-                .map(|path| {
-                    Ok(path
-                        .canonicalize()?
-                        .file_name()
-                        .unwrap()
-                        .to_str()
-                        .unwrap()
-                        .to_string())
-                })
-                .collect::<io::Result<_>>()?;
+            for address in &custom_options.vfio_pci {
+                s(
+                    w,
+                    "hostdev",
+                    &[("mode", "subsystem"), ("type", "pci")],
+                    |w| {
+                        s(w, "source", &[], |w| {
+                            se(
+                                w,
+                                "address",
+                                &[
+                                    ("domain", &format!("0x{:04x}", address.domain)),
+                                    ("bus", &format!("0x{:02x}", address.bus)),
+                                    ("slot", &format!("0x{:02x}", address.slot)),
+                                    ("function", &format!("0x{:01x}", address.function)),
+                                ],
+                            )
+                        })
+                    },
+                )?;
+            }
 
-            for uuid in vfio_pci_mdev_uuids {
+            for VfioPciMdevUuid(uuid) in &custom_options.vfio_pci_mdev {
                 s(
                     w,
                     "hostdev",
@@ -169,11 +176,7 @@ pub fn set_up_libvirt_domain_xml(
                         ("type", "mdev"),
                         ("model", "vfio-pci"),
                     ],
-                    |w| {
-                        s(w, "source", &[], |w| {
-                            se(w, "address", &[("uuid", uuid.as_ref())])
-                        })
-                    },
+                    |w| s(w, "source", &[], |w| se(w, "address", &[("uuid", uuid)])),
                 )?;
             }
 
