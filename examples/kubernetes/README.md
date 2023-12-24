@@ -1,7 +1,11 @@
 # Example: Using `crun-qemu` in Kubernetes
 
 It is possible to use `crun-qemu` to run VMs as regular pods in a [Kubernetes]
-cluster. To enable this on a cluster, follow these steps:
+cluster.
+
+## Preparation
+
+To enable the `crun-qemu` on a cluster, follow these steps:
 
 1. Ensure that the cluster is using the [CRI-O] container runtime. Refer to
    Kubernetes' docs on [container runtimes].
@@ -26,6 +30,8 @@ cluster. To enable this on a cluster, follow these steps:
    handler: crun-qemu
    ```
 
+## Using it
+
 From then on, you can run VM images packaged in container images by creating
 pods that use this `RuntimeClass`:
 
@@ -36,20 +42,24 @@ metadata:
   name: my-vm
 spec:
   containers:
-  - name: my-vm
-    image: quay.io/crun-qemu/example-http-server:latest
-    command:
-      - ""  # unused, but must specify command because container image does not
-    ports:
-      - containerPort: 80
+    - name: my-vm
+      image: quay.io/crun-qemu/example-http-server:latest
+      args:
+        - ""  # unused, but must specify command because container image does not
+      ports:
+        - containerPort: 80
   runtimeClassName: crun-qemu
 ```
+
+### Logging
 
 The VM's console output is logged:
 
 ```console
 $ kubectl logs my-vm
 ```
+
+### SSH'ing into the pod/VM
 
 Assuming the VM supports cloud-init or Ignition, you can also SSH into it using
 `kubectl exec`, with the caveat that the user to SSH as is passed in place of
@@ -63,6 +73,8 @@ fedora
 $ kubectl exec -it my-vm -- fedora
 [fedora@my-vm ~]$
 ```
+
+### Port forwarding
 
 The pod/VM defined above actually exposes an HTTP server on port 80. To talk to
 it, we must first forward a local port to the pod/VM:
@@ -86,6 +98,48 @@ $ curl localhost:8000
 </head>
 <body>
 [...]
+```
+
+### cloud-init and Ignition
+
+When using `crun-qemu` as a Kubernetes runtime, paths given to `--cloud-init`
+and `--ignition` are interpreted in the context of the container/VM, instead of
+the host. This means that config files can be retrieved from mounted volumes.
+For instance, you could store your cloud-init config in a `ConfigMap`:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-cloud-init-config
+data:
+  user-data: |
+    #cloud-config
+    runcmd:
+      - echo 'Hello, world!' > /home/fedora/hello-world
+```
+
+And pass it to your VMs like so:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-other-vm
+spec:
+  containers:
+    - name: my-other-vm
+      image: quay.io/containerdisks/fedora:39
+      args:
+        - --cloud-init=/etc/cloud-init
+      volumeMounts:
+        - name: cloud-init-vol
+          mountPath: /etc/cloud-init
+  volumes:
+    - name: cloud-init-vol
+      configMap:
+        name: my-cloud-init-config
+  runtimeClassName: crun-qemu
 ```
 
 ## minikube demo

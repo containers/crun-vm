@@ -8,6 +8,8 @@ use clap::Parser;
 use lazy_static::lazy_static;
 use regex::Regex;
 
+use crate::commands::create::runtime_env::RuntimeEnv;
+
 #[derive(Debug)]
 pub struct VfioPciAddress {
     pub domain: u16,
@@ -113,7 +115,7 @@ pub struct CustomOptions {
 }
 
 impl CustomOptions {
-    pub fn from_spec(spec: &oci_spec::runtime::Spec, is_docker: bool) -> io::Result<Self> {
+    pub fn from_spec(spec: &oci_spec::runtime::Spec, env: RuntimeEnv) -> io::Result<Self> {
         let args = spec
             .process()
             .as_ref()
@@ -126,16 +128,11 @@ impl CustomOptions {
         // TODO: We currently assume that no entrypoint is given (either by being set by in the
         // container image or through --entrypoint). Must somehow find whether the first arg is the
         // entrypoint and ignore it in that case.
-        let options = CustomOptionsRaw::parse_from(
+        let mut options = CustomOptionsRaw::parse_from(
             iter::once(&"podman run ... <image>".to_string()).chain(args),
         );
 
-        if is_docker {
-            // Unlike Podman, Docker doesn't run the runtime with the same working directory as the
-            // process that ran `docker`, so we require these paths to be absolute.
-            //
-            // TODO: There must be a better way...
-
+        if env.needs_absolute_custom_opt_paths() {
             fn any_is_relative(iter: impl IntoIterator<Item = impl AsRef<Path>>) -> bool {
                 iter.into_iter().any(|p| p.as_ref().is_relative())
             }
@@ -145,11 +142,54 @@ impl CustomOptions {
                 || any_is_relative(&options.vfio_pci)
                 || any_is_relative(&options.vfio_pci_mdev)
             {
-                return Err(io::Error::other(concat!(
-                    "paths specified using --cloud-init, --ignition, --vfio-pci, or",
-                    " --vfio-pci-mdev must be absolute when using Docker",
+                return Err(io::Error::other(format!(
+                    concat!(
+                        "paths specified using --cloud-init, --ignition, --vfio-pci, or",
+                        " --vfio-pci-mdev must be absolute when using crun-qemu with {}",
+                    ),
+                    env.name().unwrap()
                 )));
             }
+        }
+
+        if env == RuntimeEnv::Kubernetes {
+            fn path_in_container_into_path_in_host(
+                spec: &oci_spec::runtime::Spec,
+                path: Option<&mut PathBuf>,
+            ) -> io::Result<()> {
+                if let Some(path) = path {
+                    let mount = spec
+                        .mounts()
+                        .iter()
+                        .flatten()
+                        .filter(|m| m.source().is_some())
+                        .filter(|m| path.starts_with(m.destination()))
+                        .last()
+                        .ok_or_else(|| {
+                            io::Error::new(
+                                io::ErrorKind::InvalidInput,
+                                format!("can't find {}", path.to_str().unwrap()),
+                            )
+                        })?;
+
+                    let relative_path = path.strip_prefix(mount.destination()).unwrap();
+                    let path_in_host = mount.source().as_ref().unwrap().join(relative_path);
+
+                    if !path_in_host.try_exists()? {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!("can't find {}", path.to_str().unwrap()),
+                        ));
+                    }
+
+                    *path = path_in_host;
+                }
+
+                Ok(())
+            }
+
+            path_in_container_into_path_in_host(spec, options.cloud_init.as_mut())?;
+            path_in_container_into_path_in_host(spec, options.ignition.as_mut())?;
         }
 
         let options = CustomOptions {

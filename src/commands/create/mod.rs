@@ -3,6 +3,7 @@
 mod custom_opts;
 mod domain;
 mod first_boot;
+mod runtime_env;
 
 use std::error::Error;
 use std::fs::{self, Permissions};
@@ -16,6 +17,7 @@ use nix::sys::stat::{major, makedev, minor, mknod, Mode, SFlag};
 use crate::commands::create::custom_opts::CustomOptions;
 use crate::commands::create::domain::set_up_libvirt_domain_xml;
 use crate::commands::create::first_boot::FirstBootConfig;
+use crate::commands::create::runtime_env::RuntimeEnv;
 use crate::crun::crun_create;
 use crate::util::{
     create_overlay_vm_image, find_single_file_in_dirs, link_directory_with_separate_context,
@@ -31,8 +33,8 @@ pub fn create(
     let mut spec = oci_spec::runtime::Spec::load(&config_path)?;
     let original_root_path = spec.root_path().clone();
 
-    let is_docker = original_root_path.join(".dockerenv").exists();
-    let custom_options = CustomOptions::from_spec(&spec, is_docker)?;
+    let runtime_env = RuntimeEnv::current(&spec, &original_root_path)?;
+    let custom_options = CustomOptions::from_spec(&spec, runtime_env)?;
 
     set_up_container_root(&mut spec, &args.bundle)?;
     let base_vm_image_info = set_up_vm_image(&spec, &args.bundle, &original_root_path)?;

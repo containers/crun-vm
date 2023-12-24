@@ -32,7 +32,10 @@ impl FirstBootConfig<'_> {
             if let Some(user_config_path) = &in_config_dir_path {
                 let user_path = user_config_path.as_ref().join(file);
                 if user_path.exists() {
-                    if !user_path.symlink_metadata()?.is_file() {
+                    // TODO: Potential security vulnerability, symlink may point to somewhere on
+                    // host that user isn't normally able to access, especially when running as a
+                    // Kubernetes runtime.
+                    if !user_path.metadata()?.is_file() {
                         return Err(io::Error::other(format!(
                             "cloud-init: expected {file} to be a regular file"
                         ))
