@@ -1,4 +1,4 @@
-# 3. Using `crun-qemu` as a Kuberntes runtime
+# 3. Using `crun-qemu` as a Kubernetes runtime
 
 It is possible to use `crun-qemu` as a [Kubernetes] runtime, allowing you to run
 VMs as regular pods.

@@ -25,7 +25,7 @@ libvirt.
 
   1. [Installing `crun-qemu`](docs/1-installing.md)
   2. [Using `crun-qemu` as a Podman or Docker runtime](docs/2-podman-docker.md)
-  3. [Using `crun-qemu` as a Kuberntes runtime](docs/3-kubernetes.md)
+  3. [Using `crun-qemu` as a Kubernetes runtime](docs/3-kubernetes.md)
   4. [Internals](docs/4-internals.md)
 
 ### License
