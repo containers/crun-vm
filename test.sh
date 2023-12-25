@@ -30,6 +30,7 @@ fi
 
 images=(
     quay.io/containerdisks/fedora:39
+    quay.io/crun-qemu/example-fedora-coreos:39
 )
 
 # ensure that tests don't timeout because they're pulling images

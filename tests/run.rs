@@ -24,6 +24,7 @@ use uuid::Uuid;
                 "quay.io/containerdisks/fedora:39",
                 ""
             ],
+            exec_user: "fedora",
             test_script: "",
         },
         TestCase {
@@ -35,9 +36,25 @@ use uuid::Uuid;
                 &format!("--cloud-init={REPO_PATH}/examples/cloud-init/config"),
                 &format!("--ignition={REPO_PATH}/examples/ignition/config.ign"),
             ],
+            exec_user: "fedora",
             test_script: "
                 mount -l | grep '^virtiofs-0 on /home/fedora/util type virtiofs'
                 mount -l | grep '^tmpfs on /home/fedora/tmp type tmpfs'
+                ",
+        },
+        TestCase {
+            run_args: &[
+                "-h=my-test-vm",
+                "-v=./util:/var/home/core/util",
+                "--mount=type=tmpfs,dst=/var/home/core/tmp",
+                "quay.io/crun-qemu/example-fedora-coreos:39",
+                &format!("--cloud-init={REPO_PATH}/examples/cloud-init/config"),
+                &format!("--ignition={REPO_PATH}/examples/ignition/config.ign"),
+            ],
+            exec_user: "core",
+            test_script: "
+                mount -l | grep '^virtiofs-0 on /var/home/core/util type virtiofs'
+                mount -l | grep '^tmpfs on /var/home/core/tmp type tmpfs'
                 ",
         },
     ]
@@ -59,9 +76,25 @@ use uuid::Uuid;
                 "--cloud-init=examples/cloud-init/config",
                 "--ignition=examples/ignition/config.ign",
             ],
+            exec_user: "fedora",
             test_script: "
                 mount -l | grep '^virtiofs-0 on /home/fedora/util type virtiofs'
                 mount -l | grep '^tmpfs on /home/fedora/tmp type tmpfs'
+                ",
+        },
+        TestCase {
+            run_args: &[
+                "-h=my-test-vm",
+                "-v=./util:/var/home/core/util",
+                "--mount=type=tmpfs,dst=/var/home/core/tmp",
+                "quay.io/crun-qemu/example-fedora-coreos:39",
+                "--cloud-init=examples/cloud-init/config",
+                "--ignition=examples/ignition/config.ign",
+            ],
+            exec_user: "core",
+            test_script: "
+                mount -l | grep '^virtiofs-0 on /var/home/core/util type virtiofs'
+                mount -l | grep '^tmpfs on /var/home/core/tmp type tmpfs'
                 ",
         },
     ]
@@ -90,7 +123,7 @@ fn test_run(engine: Engine, case: TestCase) {
             let status = engine
                 .command("exec")
                 .arg(&container_name)
-                .arg("fedora")
+                .arg(case.exec_user)
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
@@ -104,7 +137,7 @@ fn test_run(engine: Engine, case: TestCase) {
                     .command("exec")
                     .arg("-i")
                     .arg(&container_name)
-                    .arg("fedora")
+                    .arg(case.exec_user)
                     .arg("bash")
                     .arg("-s")
                     .stdin(Stdio::piped())
@@ -152,6 +185,7 @@ const REPO_PATH: &str = env!("CARGO_MANIFEST_DIR");
 
 struct TestCase<'a> {
     run_args: &'a [&'a str],
+    exec_user: &'a str,
     test_script: &'a str,
 }
 
