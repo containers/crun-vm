@@ -53,3 +53,12 @@ default-features = false
 [dependencies.xml-rs]
 version = "0.8.0"
 default-features = false
+
+[dev-dependencies.test-case]
+version = "3.0"
+default-features = false
+
+[dev-dependencies.uuid]
+version = "1.0"
+default-features = false
+features = ["std", "v4"]

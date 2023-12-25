@@ -1,63 +1,140 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-mod util;
+#![allow(clippy::items_after_test_module)]
 
-use util::{expect_failure, expect_success, podman, podman_run, REPO_PATH};
+use std::ffi::OsStr;
+use std::io;
+use std::process::{Command, Stdio};
 
-#[test]
-fn podman_run_raw() {
-    let container_name = "crun-qemu-test-podman_run_raw";
+use test_case::test_matrix;
+use uuid::Uuid;
 
-    expect_success(podman_run([
-        "--name",
-        container_name,
-        "-dit",
-        "quay.io/kubevirt/alpine-container-disk-demo",
-        "",
-    ]));
+#[test_matrix(
+    // engine
+    [
+        Engine::Podman,
+        Engine::Docker,
+    ],
 
-    expect_success(podman(["rm", "--force", "--time=0", container_name]));
+    // args
+    [
+        [
+            "quay.io/containerdisks/fedora:39",
+            ""
+        ],
+        [
+            "-h=my-test-vm",
+            "-v=./util:/home/fedora/util",
+            "quay.io/containerdisks/fedora:39",
+            &format!("--cloud-init={REPO_PATH}/examples/cloud-init/config"),
+            &format!("--ignition={REPO_PATH}/examples/ignition/config.ign"),
+        ],
+    ]
+)]
+#[test_matrix(
+    // engine
+    [
+        Engine::Podman,
+    ],
+
+    // args
+    [
+        [
+            "-h=my-test-vm",
+            "-v=./util:/home/fedora/util",
+            "quay.io/containerdisks/fedora:39",
+            "--cloud-init=examples/cloud-init/config",
+            "--ignition=examples/ignition/config.ign",
+        ],
+    ]
+)]
+fn test_run(engine: Engine, args: impl IntoIterator<Item = impl AsRef<OsStr>>) {
+    let container_name = get_random_container_name();
+
+    // launch VM
+
+    let mut run_child: std::process::Child = engine
+        .command("run")
+        .arg(format!("--name={}", container_name))
+        .arg("--rm")
+        .args(args)
+        .spawn()
+        .unwrap();
+
+    // wait until we can exec into the VM
+
+    let result = (|| -> io::Result<()> {
+        loop {
+            assert!(run_child.try_wait()?.is_none(), "run command exited");
+
+            let status = engine
+                .command("exec")
+                .arg(&container_name)
+                .arg("fedora")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()?
+                .wait()?;
+
+            if status.success() {
+                break Ok(());
+            }
+        }
+    })();
+
+    // terminate the VM
+
+    engine
+        .command("stop")
+        .arg(&container_name)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap()
+        .wait()
+        .unwrap();
+
+    run_child.wait().unwrap();
+
+    result.unwrap();
 }
 
-#[test]
-fn podman_run_qcow2() {
-    let container_name = "crun-qemu-test-podman_run_qcow2";
+const BINARY_PATH: &str = env!("CARGO_BIN_EXE_crun-qemu");
+const REPO_PATH: &str = env!("CARGO_MANIFEST_DIR");
 
-    expect_success(podman_run([
-        "--name",
-        container_name,
-        "-dit",
-        "quay.io/containerdisks/fedora:39",
-        "",
-    ]));
-
-    expect_success(podman(["rm", "--force", "--time=0", container_name]));
+fn get_random_container_name() -> String {
+    format!("crun-qemu-test-{}", Uuid::new_v4())
 }
 
-#[test]
-fn podman_run_invalid() {
-    let container_name = "crun-qemu-test-podman_run_invalid";
-
-    let output = podman_run(["--name", container_name, "-dit", "fedora:39", ""]);
-
-    let _ = podman(["rm", "--force", "--time=0", container_name]);
-
-    expect_failure(output);
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Engine {
+    Podman,
+    Docker,
 }
 
-#[test]
-fn podman_run_mounts() {
-    let container_name = "crun-qemu-test-podman_run_mounts";
+impl Engine {
+    pub fn command(self, subcommand: &str) -> Command {
+        let engine = match self {
+            Engine::Podman => "podman",
+            Engine::Docker => "docker",
+        };
 
-    expect_success(podman_run([
-        "--name",
-        container_name,
-        "-dit",
-        &format!("-v={REPO_PATH}/util:/home/fedora/util"),
-        "quay.io/containerdisks/fedora:39",
-        &format!("--cloud-init={REPO_PATH}/examples/cloud-init/config"),
-        &format!("--ignition={REPO_PATH}/examples/ignition/config.ign"),
-    ]));
+        let mut cmd = Command::new(engine);
+        cmd.arg(subcommand);
 
-    expect_success(podman(["rm", "--force", "--time=0", container_name]));
+        if subcommand == "run" {
+            match self {
+                Engine::Podman => {
+                    cmd.arg(format!("--runtime={}", BINARY_PATH));
+                }
+                Engine::Docker => {
+                    cmd.arg("--security-opt=label=disable");
+                    cmd.arg("--runtime=crun-qemu");
+                }
+            }
+        }
+
+        cmd.env("RUST_BACKTRACE", "1");
+        cmd
+    }
 }

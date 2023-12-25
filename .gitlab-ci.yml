@@ -1,29 +1,19 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
 .test:
-  stage: test
   only:
-  - branches
-  - merge_requests
+    - branches
+    - merge_requests
   tags:
-    # use runners with more memory to avoid OOM during compilation
     - saas-linux-medium-amd64
-  before_script:
-    - apt-get update -qy
-    - apt-get install -qy podman
-    - |
-      # switch to iptables, as GitLab CI doesn't support nftables
-      apt-get install -qy --no-install-recommends iptables
-      update-alternatives --set iptables /usr/sbin/iptables-legacy
 
 rust-stable:
   extends: .test
   image: rust:latest
-  script:
+  before_script:
     - rustup component add clippy rustfmt
-    # - ./test.sh  # TODO: make this work
-    - cargo fmt --all -- --check
-    - cargo clippy --all-targets --all-features -- --deny warnings
+  script:
+    - ./lint.sh
 
 rust-1.74:
   extends: rust-stable
@@ -32,7 +22,8 @@ rust-1.74:
 minimum-dependency-versions:
   extends: .test
   image: rust:1.74
-  script:
+  before_script:
     - rustup toolchain add nightly
     - cargo +nightly install cargo-hack cargo-minimal-versions --locked
+  script:
     - cargo minimal-versions check --workspace
