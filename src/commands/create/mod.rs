@@ -40,26 +40,25 @@ pub fn create(
     let base_vm_image_info =
         set_up_vm_image(&spec, &args.bundle, &original_root_path, &custom_options)?;
 
-    let virtiofs_mounts = set_up_directory_bind_mounts(&mut spec)?;
-    let block_devices = set_up_block_devices(&mut spec)?;
+    let (virtiofs_mounts, tmpfs_mounts) = set_up_mounts(&mut spec)?;
+    let block_device_mounts = set_up_block_devices(&mut spec)?;
+
+    let mounts = Mounts {
+        virtiofs: virtiofs_mounts,
+        tmpfs: tmpfs_mounts,
+        block_device: block_device_mounts,
+    };
+
     set_up_char_devices(&mut spec)?;
 
-    set_up_directories_and_files_from_host(&mut spec)?;
-
+    set_up_extra_container_mounts(&mut spec)?;
     set_up_security(&mut spec);
 
     spec.save(&config_path)?;
     spec.save(spec.root_path().join("crun-qemu/config.json"))?; // to aid debugging
 
-    set_up_first_boot_config(&spec, &custom_options, &block_devices, &virtiofs_mounts)?;
-
-    set_up_libvirt_domain_xml(
-        &spec,
-        &base_vm_image_info,
-        &block_devices,
-        &virtiofs_mounts,
-        &custom_options,
-    )?;
+    set_up_first_boot_config(&spec, &mounts, &custom_options)?;
+    set_up_libvirt_domain_xml(&spec, &base_vm_image_info, &mounts, &custom_options)?;
 
     crun_create(global_args, args)?; // actually create container
 
@@ -193,16 +192,30 @@ fn set_up_vm_image(
     Ok(vm_image_info)
 }
 
-struct GuestMount {
+struct Mounts {
+    virtiofs: Vec<VirtiofsMount>,
+    tmpfs: Vec<TmpfsMount>,
+    block_device: Vec<BlockDeviceMount>,
+}
+
+struct BlockDeviceMount {
     path_in_container: PathBuf,
     path_in_guest: PathBuf,
 }
 
-fn set_up_directory_bind_mounts(
+struct VirtiofsMount {
+    path_in_container: PathBuf,
+    path_in_guest: PathBuf,
+}
+
+struct TmpfsMount {
+    path_in_guest: PathBuf,
+}
+
+fn set_up_mounts(
     spec: &mut oci_spec::runtime::Spec,
-) -> Result<Vec<GuestMount>, Box<dyn Error>> {
+) -> Result<(Vec<VirtiofsMount>, Vec<TmpfsMount>), Box<dyn Error>> {
     const TARGETS_TO_IGNORE: &[&str] = &[
-        "/dev",
         "/etc/hostname",
         "/etc/hosts",
         "/etc/resolv.conf",
@@ -213,50 +226,79 @@ fn set_up_directory_bind_mounts(
         "/sys/fs/cgroup",
     ];
 
-    let mut directory_bind_mounts: Vec<GuestMount> = vec![];
-    let mut mounts = spec.mounts().clone().unwrap_or_default();
+    const TARGET_PREFIXES_TO_IGNORE: &[&str] = &["/dev"];
 
-    for mount in &mut mounts {
-        if mount.typ().as_deref() != Some("bind")
-            || TARGETS_TO_IGNORE.contains(&mount.destination().to_str().unwrap_or_default())
-            || mount.destination().starts_with("/dev/")
+    let mut new_mounts: Vec<oci_spec::runtime::Mount> = vec![];
+
+    let mut virtiofs_mounts: Vec<VirtiofsMount> = vec![];
+    let mut tmpfs_mounts: Vec<TmpfsMount> = vec![];
+
+    for mount in spec.mounts().iter().flatten() {
+        if TARGETS_TO_IGNORE
+            .iter()
+            .any(|path| mount.destination() == Path::new(path))
         {
+            new_mounts.push(mount.clone());
             continue;
         }
 
-        let meta = match mount.source() {
-            Some(source) => source.metadata()?,
-            None => continue,
-        };
-
-        if !meta.file_type().is_dir() {
+        if TARGET_PREFIXES_TO_IGNORE
+            .iter()
+            .any(|prefix| mount.destination().starts_with(prefix))
+        {
+            new_mounts.push(mount.clone());
             continue;
         }
 
-        let path_in_container = PathBuf::from(format!(
-            "/crun-qemu/dir-bind-mounts/{}",
-            directory_bind_mounts.len()
-        ));
-        let path_in_guest = mount.destination().clone();
+        match mount.typ().as_deref() {
+            Some("bind") => {
+                let meta = match mount.source() {
+                    Some(source) => source.metadata()?,
+                    None => continue,
+                };
 
-        // redirect the mount to a path that we control in container
-        mount.set_destination(path_in_container.clone());
+                if !meta.file_type().is_dir() {
+                    continue;
+                }
 
-        directory_bind_mounts.push(GuestMount {
-            path_in_container,
-            path_in_guest,
-        });
+                let path_in_container =
+                    PathBuf::from(format!("/crun-qemu/virtiofs/{}", virtiofs_mounts.len()));
+                let path_in_guest = mount.destination().clone();
+
+                // redirect the mount to a path in the container that we control
+                let mut new_mount = mount.clone();
+                new_mount.set_destination(path_in_container.clone());
+                new_mounts.push(new_mount);
+
+                virtiofs_mounts.push(VirtiofsMount {
+                    path_in_container,
+                    path_in_guest,
+                });
+            }
+            Some("tmpfs") => {
+                // don't actually mount it in the container
+
+                let path_in_guest = mount.destination().clone();
+                tmpfs_mounts.push(TmpfsMount { path_in_guest });
+            }
+            _ => {
+                return Err(Box::new(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "only bind and tmpfs mounts are supported",
+                )))
+            }
+        }
     }
 
-    spec.set_mounts(Some(mounts));
+    spec.set_mounts(Some(new_mounts));
 
-    Ok(directory_bind_mounts)
+    Ok((virtiofs_mounts, tmpfs_mounts))
 }
 
 fn set_up_block_devices(
     spec: &mut oci_spec::runtime::Spec,
-) -> Result<Vec<GuestMount>, Box<dyn Error>> {
-    let mut block_devices: Vec<GuestMount> = vec![];
+) -> Result<Vec<BlockDeviceMount>, Box<dyn Error>> {
+    let mut block_devices: Vec<BlockDeviceMount> = vec![];
 
     // set up block devices passed in using --device (note that rootless podman will turn those into
     // --mount/--volume instead)
@@ -281,7 +323,7 @@ fn set_up_block_devices(
             makedev(major, minor),
         )?;
 
-        block_devices.push(GuestMount {
+        block_devices.push(BlockDeviceMount {
             path_in_container,
             path_in_guest,
         });
@@ -329,7 +371,7 @@ fn set_up_block_devices(
                 .unwrap(),
         );
 
-        block_devices.push(GuestMount {
+        block_devices.push(BlockDeviceMount {
             path_in_container,
             path_in_guest,
         });
@@ -383,9 +425,7 @@ fn set_up_char_devices(spec: &mut oci_spec::runtime::Spec) -> Result<(), Box<dyn
     Ok(())
 }
 
-fn set_up_directories_and_files_from_host(
-    spec: &mut oci_spec::runtime::Spec,
-) -> Result<(), Box<dyn Error>> {
+fn set_up_extra_container_mounts(spec: &mut oci_spec::runtime::Spec) -> Result<(), Box<dyn Error>> {
     const PATHS_TO_BIND_MOUNT: &[&str] =
         &["/bin", "/dev/log", "/etc/pam.d", "/lib", "/lib64", "/usr"];
 
@@ -434,17 +474,15 @@ fn set_up_security(spec: &mut oci_spec::runtime::Spec) {
 /// Configure cloud-init and Ignition for first-boot customization.
 fn set_up_first_boot_config(
     spec: &oci_spec::runtime::Spec,
+    mounts: &Mounts,
     custom_options: &CustomOptions,
-    block_devices: &[GuestMount],
-    virtiofs_mounts: &[GuestMount],
 ) -> Result<(), Box<dyn Error>> {
     let container_public_key = generate_container_ssh_key_pair(spec)?;
 
     let config = FirstBootConfig {
         hostname: spec.hostname().as_deref(),
         container_public_key: &container_public_key,
-        block_devices,
-        virtiofs_mounts,
+        mounts,
     };
 
     config.apply_to_cloud_init_config(

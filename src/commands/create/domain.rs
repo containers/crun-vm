@@ -8,14 +8,13 @@ use sysinfo::SystemExt;
 use xml::writer::XmlEvent;
 
 use crate::commands::create::custom_opts::{CustomOptions, VfioPciMdevUuid};
-use crate::commands::create::GuestMount;
+use crate::commands::create::Mounts;
 use crate::util::{SpecExt, VmImageInfo};
 
 pub fn set_up_libvirt_domain_xml(
     spec: &oci_spec::runtime::Spec,
     vm_image_info: &VmImageInfo,
-    block_devices: &[GuestMount],
-    virtiofs_mounts: &[GuestMount],
+    mounts: &Mounts,
     custom_options: &CustomOptions,
 ) -> Result<(), Box<dyn Error>> {
     let path = spec.root_path().join("crun-qemu/domain.xml");
@@ -56,7 +55,7 @@ pub fn set_up_libvirt_domain_xml(
             )
         })?;
 
-        if !virtiofs_mounts.is_empty() {
+        if !mounts.virtiofs.is_empty() {
             s(w, "memoryBacking", &[], |w| {
                 se(w, "source", &[("type", "memfd")])?;
                 se(w, "access", &[("mode", "shared")])?;
@@ -96,7 +95,7 @@ pub fn set_up_libvirt_domain_xml(
                 Ok(())
             })?;
 
-            for (i, dev) in block_devices.iter().enumerate() {
+            for (i, dev) in mounts.block_device.iter().enumerate() {
                 s(w, "disk", &[("type", "block"), ("device", "disk")], |w| {
                     se(w, "target", &[("dev", &next_dev_name()), ("bus", "virtio")])?;
                     se(
@@ -128,7 +127,7 @@ pub fn set_up_libvirt_domain_xml(
                 Ok(())
             })?;
 
-            for (i, mount) in virtiofs_mounts.iter().enumerate() {
+            for (i, mount) in mounts.virtiofs.iter().enumerate() {
                 let path = mount.path_in_container.to_str().unwrap();
                 let tag = format!("virtiofs-{}", i);
 
