@@ -40,18 +40,11 @@ pub fn create(
     let base_vm_image_info =
         set_up_vm_image(&spec, &args.bundle, &original_root_path, &custom_options)?;
 
-    let (virtiofs_mounts, tmpfs_mounts) = set_up_mounts(&mut spec)?;
-    let block_device_mounts = set_up_block_devices(&mut spec)?;
+    let mut mounts = Mounts::default();
+    set_up_mounts(&mut spec, &mut mounts)?;
+    set_up_devices(&mut spec, &mut mounts)?;
 
-    let mounts = Mounts {
-        virtiofs: virtiofs_mounts,
-        tmpfs: tmpfs_mounts,
-        block_device: block_device_mounts,
-    };
-
-    set_up_char_devices(&mut spec)?;
-
-    set_up_extra_container_mounts(&mut spec)?;
+    set_up_extra_container_mounts_and_devices(&mut spec)?;
     set_up_security(&mut spec);
 
     spec.save(&config_path)?;
@@ -192,6 +185,7 @@ fn set_up_vm_image(
     Ok(vm_image_info)
 }
 
+#[derive(Default)]
 struct Mounts {
     virtiofs: Vec<VirtiofsMount>,
     tmpfs: Vec<TmpfsMount>,
@@ -199,8 +193,10 @@ struct Mounts {
 }
 
 struct BlockDeviceMount {
+    is_regular_file: bool,
     path_in_container: PathBuf,
     path_in_guest: PathBuf,
+    readonly: bool,
 }
 
 struct VirtiofsMount {
@@ -214,7 +210,8 @@ struct TmpfsMount {
 
 fn set_up_mounts(
     spec: &mut oci_spec::runtime::Spec,
-) -> Result<(Vec<VirtiofsMount>, Vec<TmpfsMount>), Box<dyn Error>> {
+    mounts: &mut Mounts,
+) -> Result<(), Box<dyn Error>> {
     const TARGETS_TO_IGNORE: &[&str] = &[
         "/etc/hostname",
         "/etc/hosts",
@@ -228,58 +225,78 @@ fn set_up_mounts(
 
     const TARGET_PREFIXES_TO_IGNORE: &[&str] = &["/dev"];
 
-    let mut new_mounts: Vec<oci_spec::runtime::Mount> = vec![];
+    let mut new_oci_mounts: Vec<oci_spec::runtime::Mount> = vec![];
 
-    let mut virtiofs_mounts: Vec<VirtiofsMount> = vec![];
-    let mut tmpfs_mounts: Vec<TmpfsMount> = vec![];
-
-    for mount in spec.mounts().iter().flatten() {
-        if TARGETS_TO_IGNORE
+    for oci_mount in spec.mounts().iter().flatten() {
+        let is_in_targets_to_ignore = TARGETS_TO_IGNORE
             .iter()
-            .any(|path| mount.destination() == Path::new(path))
-        {
-            new_mounts.push(mount.clone());
+            .any(|path| oci_mount.destination() == Path::new(path));
+
+        let is_in_target_prefixes_to_ignore = TARGET_PREFIXES_TO_IGNORE
+            .iter()
+            .any(|prefix| oci_mount.destination().starts_with(prefix));
+
+        if is_in_targets_to_ignore || is_in_target_prefixes_to_ignore {
+            new_oci_mounts.push(oci_mount.clone());
             continue;
         }
 
-        if TARGET_PREFIXES_TO_IGNORE
-            .iter()
-            .any(|prefix| mount.destination().starts_with(prefix))
-        {
-            new_mounts.push(mount.clone());
-            continue;
-        }
-
-        match mount.typ().as_deref() {
+        match oci_mount.typ().as_deref() {
             Some("bind") => {
-                let meta = match mount.source() {
+                let meta = match oci_mount.source() {
                     Some(source) => source.metadata()?,
                     None => continue,
                 };
 
-                if !meta.file_type().is_dir() {
-                    continue;
+                let path_in_container;
+
+                if meta.file_type().is_dir() {
+                    path_in_container = PathBuf::from(format!(
+                        "/crun-qemu/mounts/virtiofs/{}",
+                        mounts.virtiofs.len()
+                    ));
+                    let path_in_guest = oci_mount.destination().clone();
+
+                    mounts.virtiofs.push(VirtiofsMount {
+                        path_in_container: path_in_container.clone(),
+                        path_in_guest,
+                    });
+                } else if meta.file_type().is_block_device() || meta.file_type().is_file() {
+                    let readonly = oci_mount
+                        .options()
+                        .iter()
+                        .flatten()
+                        .any(|o| o == "ro" || o == "readonly");
+
+                    path_in_container = PathBuf::from(format!(
+                        "crun-qemu/mounts/block/{}",
+                        mounts.block_device.len()
+                    ));
+                    let path_in_guest = oci_mount.destination().clone();
+
+                    mounts.block_device.push(BlockDeviceMount {
+                        is_regular_file: meta.file_type().is_file(),
+                        path_in_container: path_in_container.clone(),
+                        path_in_guest,
+                        readonly,
+                    });
+                } else {
+                    return Err(Box::new(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "can only bind mount regular files, directories, and block devices",
+                    )));
                 }
 
-                let path_in_container =
-                    PathBuf::from(format!("/crun-qemu/virtiofs/{}", virtiofs_mounts.len()));
-                let path_in_guest = mount.destination().clone();
-
                 // redirect the mount to a path in the container that we control
-                let mut new_mount = mount.clone();
-                new_mount.set_destination(path_in_container.clone());
-                new_mounts.push(new_mount);
-
-                virtiofs_mounts.push(VirtiofsMount {
-                    path_in_container,
-                    path_in_guest,
-                });
+                let mut new_mount = oci_mount.clone();
+                new_mount.set_destination(path_in_container);
+                new_oci_mounts.push(new_mount);
             }
             Some("tmpfs") => {
                 // don't actually mount it in the container
 
-                let path_in_guest = mount.destination().clone();
-                tmpfs_mounts.push(TmpfsMount { path_in_guest });
+                let path_in_guest = oci_mount.destination().clone();
+                mounts.tmpfs.push(TmpfsMount { path_in_guest });
             }
             _ => {
                 return Err(Box::new(io::Error::new(
@@ -290,16 +307,15 @@ fn set_up_mounts(
         }
     }
 
-    spec.set_mounts(Some(new_mounts));
+    spec.set_mounts(Some(new_oci_mounts));
 
-    Ok((virtiofs_mounts, tmpfs_mounts))
+    Ok(())
 }
 
-fn set_up_block_devices(
+fn set_up_devices(
     spec: &mut oci_spec::runtime::Spec,
-) -> Result<Vec<BlockDeviceMount>, Box<dyn Error>> {
-    let mut block_devices: Vec<BlockDeviceMount> = vec![];
-
+    mounts: &mut Mounts,
+) -> Result<(), Box<dyn Error>> {
     // set up block devices passed in using --device (note that rootless podman will turn those into
     // --mount/--volume instead)
 
@@ -310,8 +326,12 @@ fn set_up_block_devices(
 
         let major: u64 = device.major().try_into().unwrap();
         let minor: u64 = device.minor().try_into().unwrap();
+        let mode = device.file_mode().unwrap();
 
-        let path_in_container = PathBuf::from(format!("crun-qemu/bdevs/{}:{}", major, minor));
+        let path_in_container = PathBuf::from(format!(
+            "crun-qemu/mounts/block/{}",
+            mounts.block_device.len()
+        ));
         let path_in_guest = device.path().clone();
 
         fs::create_dir_all(spec.root_path().join(&path_in_container).parent().unwrap())?;
@@ -319,76 +339,25 @@ fn set_up_block_devices(
         mknod(
             &spec.root_path().join(&path_in_container),
             SFlag::S_IFBLK,
-            Mode::from_bits_retain(device.file_mode().unwrap()),
+            Mode::from_bits_retain(mode),
             makedev(major, minor),
         )?;
 
-        block_devices.push(BlockDeviceMount {
+        mounts.block_device.push(BlockDeviceMount {
+            is_regular_file: false,
             path_in_container,
             path_in_guest,
+            readonly: mode & 0o222 == 0,
         });
     }
 
-    // set up block devices passed in using --mount/--volume
-
-    let mut mounts = spec.mounts().clone().unwrap_or_default();
-
-    for mount in &mut mounts {
-        if mount.typ().as_deref() != Some("bind") {
-            continue;
-        }
-
-        let source = match mount.source() {
-            Some(source) => source,
-            None => continue,
-        };
-
-        let meta = source.metadata()?;
-
-        if !meta.file_type().is_block_device() {
-            continue;
-        }
-
-        let major = major(meta.rdev());
-        let minor = minor(meta.rdev());
-
-        let path_in_container = PathBuf::from(format!("crun-qemu/bdevs/{}:{}", major, minor));
-        let path_in_guest = mount.destination().clone();
-
-        // redirect the mount to a path that we control in container
-        mount.set_destination(path_in_container.clone());
-
-        // with Docker and rootful Podman, we must add devices that are passed in as bind mounts
-        // to .linux.resources.devices for the container to actually be able to access them
-        spec.linux_resources_devices_push(
-            oci_spec::runtime::LinuxDeviceCgroupBuilder::default()
-                .allow(true)
-                .typ(oci_spec::runtime::LinuxDeviceType::B)
-                .major(i64::try_from(major).unwrap())
-                .minor(i64::try_from(minor).unwrap())
-                .access("rwm")
-                .build()
-                .unwrap(),
-        );
-
-        block_devices.push(BlockDeviceMount {
-            path_in_container,
-            path_in_guest,
-        });
-    }
-
-    spec.set_mounts(Some(mounts));
-
-    Ok(block_devices)
+    Ok(())
 }
 
-fn set_up_char_devices(spec: &mut oci_spec::runtime::Spec) -> Result<(), Box<dyn Error>> {
-    fn set_up(
-        spec: &mut oci_spec::runtime::Spec,
-        path: impl AsRef<Path>,
-    ) -> Result<(), Box<dyn Error>> {
-        let rdev = fs::metadata(path.as_ref())?.rdev();
-
+fn set_up_extra_container_mounts_and_devices(
+    spec: &mut oci_spec::runtime::Spec,
+) -> Result<(), Box<dyn Error>> {
+    fn add_bind_mount(spec: &mut oci_spec::runtime::Spec, path: impl AsRef<Path>) {
         spec.mounts_push(
             oci_spec::runtime::MountBuilder::default()
                 .typ("bind")
@@ -398,6 +367,13 @@ fn set_up_char_devices(spec: &mut oci_spec::runtime::Spec) -> Result<(), Box<dyn
                 .build()
                 .unwrap(),
         );
+    }
+
+    fn add_char_dev(
+        spec: &mut oci_spec::runtime::Spec,
+        path: impl AsRef<Path>,
+    ) -> Result<(), Box<dyn Error>> {
+        let rdev = fs::metadata(path.as_ref())?.rdev();
 
         spec.linux_resources_devices_push(
             oci_spec::runtime::LinuxDeviceCgroupBuilder::default()
@@ -413,37 +389,24 @@ fn set_up_char_devices(spec: &mut oci_spec::runtime::Spec) -> Result<(), Box<dyn
         Ok(())
     }
 
-    set_up(spec, "/dev/kvm")?;
+    fs::create_dir_all(spec.root_path().join("etc"))?;
+    fs::copy("/etc/passwd", spec.root_path().join("etc/passwd"))?;
+    fs::copy("/etc/group", spec.root_path().join("etc/group"))?;
+
+    for path in ["/bin", "/dev/log", "/etc/pam.d", "/lib", "/lib64", "/usr"] {
+        add_bind_mount(spec, path);
+    }
+
+    add_bind_mount(spec, "/dev/kvm");
+    add_char_dev(spec, "/dev/kvm")?;
 
     for entry in fs::read_dir("/dev/vfio")? {
         let entry = entry?;
         if entry.metadata()?.file_type().is_char_device() {
-            set_up(spec, entry.path())?;
+            add_bind_mount(spec, entry.path());
+            add_char_dev(spec, entry.path())?;
         }
     }
-
-    Ok(())
-}
-
-fn set_up_extra_container_mounts(spec: &mut oci_spec::runtime::Spec) -> Result<(), Box<dyn Error>> {
-    const PATHS_TO_BIND_MOUNT: &[&str] =
-        &["/bin", "/dev/log", "/etc/pam.d", "/lib", "/lib64", "/usr"];
-
-    for path in PATHS_TO_BIND_MOUNT {
-        spec.mounts_push(
-            oci_spec::runtime::MountBuilder::default()
-                .typ("bind")
-                .source(path)
-                .destination(path)
-                .options(["bind".to_string(), "rprivate".to_string(), "ro".to_string()])
-                .build()
-                .unwrap(),
-        );
-    }
-
-    fs::create_dir_all(spec.root_path().join("etc"))?;
-    fs::copy("/etc/passwd", spec.root_path().join("etc/passwd"))?;
-    fs::copy("/etc/group", spec.root_path().join("etc/group"))?;
 
     Ok(())
 }

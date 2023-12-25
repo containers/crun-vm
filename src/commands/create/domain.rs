@@ -96,14 +96,20 @@ pub fn set_up_libvirt_domain_xml(
             })?;
 
             for (i, dev) in mounts.block_device.iter().enumerate() {
-                s(w, "disk", &[("type", "block"), ("device", "disk")], |w| {
+                let typ = if dev.is_regular_file { "file" } else { "block" };
+                let source_attr = if dev.is_regular_file { "file" } else { "dev" };
+
+                s(w, "disk", &[("type", typ), ("device", "disk")], |w| {
                     se(w, "target", &[("dev", &next_dev_name()), ("bus", "virtio")])?;
                     se(
                         w,
                         "source",
-                        &[("dev", dev.path_in_container.to_str().unwrap())],
+                        &[(source_attr, dev.path_in_container.to_str().unwrap())],
                     )?;
-                    st(w, "serial", &[], &format!("crun-qemu-bdev-{i}"))?;
+                    if dev.readonly {
+                        se(w, "readonly", &[])?;
+                    }
+                    st(w, "serial", &[], &format!("crun-qemu-block-{i}"))?;
                     Ok(())
                 })?;
             }
@@ -114,7 +120,6 @@ pub fn set_up_libvirt_domain_xml(
                     "source",
                     &[("file", "/crun-qemu/cloud-init/cloud-init.iso")],
                 )?;
-                se(w, "driver", &[("name", "qemu"), ("type", "raw")])?;
                 se(w, "target", &[("dev", &next_dev_name()), ("bus", "virtio")])?;
                 Ok(())
             })?;

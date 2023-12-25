@@ -151,7 +151,7 @@ impl FirstBootConfig<'_> {
                 runcmd.push(serde_yaml::Value::Sequence(vec![
                     "ln".into(),
                     "--symbolic".into(),
-                    format!("/dev/disk/by-id/virtio-crun-qemu-bdev-{i}").into(),
+                    format!("/dev/disk/by-id/virtio-crun-qemu-block-{i}").into(),
                     dev.path_in_guest.to_str().expect("path is utf-8").into(),
                 ]));
             }
@@ -314,7 +314,7 @@ impl FirstBootConfig<'_> {
             links.push(serde_json::json!({
                 "path": dev.path_in_guest,
                 "overwrite": true,
-                "target": format!("/dev/disk/by-id/virtio-crun-qemu-bdev-{i}"),
+                "target": format!("/dev/disk/by-id/virtio-crun-qemu-block-{i}"),
                 "hard": false,
             }));
         }

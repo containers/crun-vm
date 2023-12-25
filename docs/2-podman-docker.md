@@ -207,7 +207,7 @@ $ curl localhost:8000
 
 ## Passing things through to the VM
 
-### Directory bind mounts
+### Directories
 
 Bind mounting directories into the VM is supported:
 
@@ -239,6 +239,23 @@ according to the order the `-v`/`--volume` or `--mount` flags where given in:
 
 ```console
 $ mount -t virtiofs virtiofs-<index> /home/fedora/util
+```
+
+### Regular files
+
+Similarly to directories, you can bind mount regular files into the VM, where
+they appear as block devices:
+
+> :warning: The warning about SELinux relabeling on the command above also
+> applies here.
+
+```console
+$ podman run \
+    --runtime crun-qemu \
+    -it --rm \
+    -v ./README.md:/home/fedora/README.md:z \
+    quay.io/containerdisks/fedora:39 \
+    --cloud-init examples/cloud-init/config
 ```
 
 ### Block devices
