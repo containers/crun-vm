@@ -158,10 +158,10 @@ $ podman run \
     ""
 8068a2c180e0f4bf494f5e0baa37d9f13a9810f76b361c0771b73666e47ec383
 
-$ podman exec --latest -- fedora whoami
+$ podman exec --latest fedora whoami
 fedora
 
-$ podman exec -it --latest -- fedora
+$ podman exec -it --latest fedora
 [fedora@8068a2c180e0 ~]$
 ```
 
