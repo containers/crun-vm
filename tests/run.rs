@@ -3,11 +3,11 @@
 #![allow(clippy::items_after_test_module)]
 
 use std::env;
-use std::io;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
 
+use anyhow::{anyhow, Result};
 use test_case::test_matrix;
 use uuid::Uuid;
 
@@ -110,7 +110,7 @@ fn test_run(engine: Engine, case: TestCase) {
 
     // wait until we can exec into the VM
 
-    let result = (|| -> io::Result<()> {
+    let result = (|| -> Result<()> {
         loop {
             assert!(run_child.try_wait()?.is_none(), "run command exited");
 
@@ -148,9 +148,7 @@ fn test_run(engine: Engine, case: TestCase) {
 
                 break match exec_child.wait()?.code().unwrap() {
                     0 => Ok(()),
-                    n => Err(io::Error::other(format!(
-                        "test script failed with exit code {n}"
-                    ))),
+                    n => Err(anyhow!("test script failed with exit code {n}")),
                 };
             }
         }

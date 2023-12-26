@@ -4,10 +4,10 @@ mod commands;
 mod crun;
 mod util;
 
-use std::error::Error;
 use std::ffi::OsStr;
 use std::iter;
 
+use anyhow::Result;
 use clap::Parser;
 use crun::crun;
 
@@ -31,7 +31,7 @@ enum Command {
     Common(Box<liboci_cli::CommonCmd>),
 }
 
-pub fn main<I, S>(args: I) -> Result<(), Box<dyn Error>>
+pub fn main<I, S>(args: I) -> Result<()>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,

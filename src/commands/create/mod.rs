@@ -5,13 +5,12 @@ mod domain;
 mod first_boot;
 mod runtime_env;
 
-use std::error::Error;
 use std::fs::{self, Permissions};
-use std::io;
 use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use anyhow::{bail, Result};
 use nix::sys::stat::{major, makedev, minor, mknod, Mode, SFlag};
 
 use crate::commands::create::custom_opts::CustomOptions;
@@ -24,10 +23,7 @@ use crate::util::{
     find_single_file_in_dirs, set_file_context, PathExt, SpecExt, VmImageInfo,
 };
 
-pub fn create(
-    global_args: &liboci_cli::GlobalOpts,
-    args: &liboci_cli::Create,
-) -> Result<(), Box<dyn Error>> {
+pub fn create(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Create) -> Result<()> {
     let config_path = args.bundle.join("config.json");
 
     let mut spec = oci_spec::runtime::Spec::load(&config_path)?;
@@ -58,10 +54,7 @@ pub fn create(
     Ok(())
 }
 
-fn set_up_container_root(
-    spec: &mut oci_spec::runtime::Spec,
-    bundle_path: &Path,
-) -> Result<(), Box<dyn Error>> {
+fn set_up_container_root(spec: &mut oci_spec::runtime::Spec, bundle_path: &Path) -> Result<()> {
     // create root directory
 
     spec.set_root(Some(
@@ -107,7 +100,7 @@ fn set_up_vm_image(
     bundle_path: &Path,
     original_root_path: &Path,
     custom_options: &CustomOptions,
-) -> Result<VmImageInfo, Box<dyn Error>> {
+) -> Result<VmImageInfo> {
     // where inside the container to look for the VM image
     const VM_IMAGE_SEARCH_PATHS: [&str; 2] = ["./", "disk/"];
 
@@ -207,10 +200,7 @@ struct TmpfsMount {
     path_in_guest: PathBuf,
 }
 
-fn set_up_mounts(
-    spec: &mut oci_spec::runtime::Spec,
-    mounts: &mut Mounts,
-) -> Result<(), Box<dyn Error>> {
+fn set_up_mounts(spec: &mut oci_spec::runtime::Spec, mounts: &mut Mounts) -> Result<()> {
     const TARGETS_TO_IGNORE: &[&str] = &[
         "/etc/hostname",
         "/etc/hosts",
@@ -280,10 +270,7 @@ fn set_up_mounts(
                         readonly,
                     });
                 } else {
-                    return Err(Box::new(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "can only bind mount regular files, directories, and block devices",
-                    )));
+                    bail!("can only bind mount regular files, directories, and block devices");
                 }
 
                 // redirect the mount to a path in the container that we control
@@ -298,10 +285,7 @@ fn set_up_mounts(
                 mounts.tmpfs.push(TmpfsMount { path_in_guest });
             }
             _ => {
-                return Err(Box::new(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "only bind and tmpfs mounts are supported",
-                )))
+                bail!("only bind and tmpfs mounts are supported");
             }
         }
     }
@@ -311,10 +295,7 @@ fn set_up_mounts(
     Ok(())
 }
 
-fn set_up_devices(
-    spec: &mut oci_spec::runtime::Spec,
-    mounts: &mut Mounts,
-) -> Result<(), Box<dyn Error>> {
+fn set_up_devices(spec: &mut oci_spec::runtime::Spec, mounts: &mut Mounts) -> Result<()> {
     // set up block devices passed in using --device (note that rootless podman will turn those into
     // --mount/--volume instead)
 
@@ -353,9 +334,7 @@ fn set_up_devices(
     Ok(())
 }
 
-fn set_up_extra_container_mounts_and_devices(
-    spec: &mut oci_spec::runtime::Spec,
-) -> Result<(), Box<dyn Error>> {
+fn set_up_extra_container_mounts_and_devices(spec: &mut oci_spec::runtime::Spec) -> Result<()> {
     fn add_bind_mount(spec: &mut oci_spec::runtime::Spec, path: impl AsRef<Path>) {
         spec.mounts_push(
             oci_spec::runtime::MountBuilder::default()
@@ -368,10 +347,7 @@ fn set_up_extra_container_mounts_and_devices(
         );
     }
 
-    fn add_char_dev(
-        spec: &mut oci_spec::runtime::Spec,
-        path: impl AsRef<Path>,
-    ) -> Result<(), Box<dyn Error>> {
+    fn add_char_dev(spec: &mut oci_spec::runtime::Spec, path: impl AsRef<Path>) -> Result<()> {
         let rdev = fs::metadata(path.as_ref())?.rdev();
 
         spec.linux_resources_devices_push(
@@ -438,7 +414,7 @@ fn set_up_first_boot_config(
     spec: &oci_spec::runtime::Spec,
     mounts: &Mounts,
     custom_options: &CustomOptions,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<()> {
     let container_public_key = generate_container_ssh_key_pair(spec)?;
 
     let config = FirstBootConfig {
@@ -461,9 +437,7 @@ fn set_up_first_boot_config(
 }
 
 /// Returns the public key.
-fn generate_container_ssh_key_pair(
-    spec: &oci_spec::runtime::Spec,
-) -> Result<String, Box<dyn Error>> {
+fn generate_container_ssh_key_pair(spec: &oci_spec::runtime::Spec) -> Result<String> {
     fs::create_dir_all(spec.root_path().join("root/.ssh"))?;
 
     let status = Command::new("ssh-keygen")
@@ -476,7 +450,7 @@ fn generate_container_ssh_key_pair(
         .wait()?;
 
     if !status.success() {
-        return Err(Box::new(io::Error::other("ssh-keygen failed")));
+        bail!("ssh-keygen failed");
     }
 
     let public_key = fs::read_to_string(spec.root_path().join("root/.ssh/id_rsa.pub"))?;

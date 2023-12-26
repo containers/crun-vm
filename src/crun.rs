@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use std::ffi::OsStr;
-use std::io;
 use std::process::Command;
+
+use anyhow::{bail, Result};
 
 use crate::util::PathExt;
 
@@ -12,24 +13,21 @@ use crate::util::PathExt;
 ///
 /// TODO: It may be better to use libcrun directly, although its public API purportedly isn't in
 /// great shape: https://github.com/containers/crun/issues/1018
-pub fn crun<I, S>(args: I) -> io::Result<()>
+pub fn crun<I, S>(args: I) -> Result<()>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
     let status = Command::new("crun").args(args).spawn()?.wait()?;
 
-    if status.success() {
-        Ok(())
-    } else {
-        Err(io::Error::other("crun failed"))
+    if !status.success() {
+        bail!("crun failed");
     }
+
+    Ok(())
 }
 
-pub fn crun_create(
-    global_args: &liboci_cli::GlobalOpts,
-    args: &liboci_cli::Create,
-) -> io::Result<()> {
+pub fn crun_create(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Create) -> Result<()> {
     // build crun argument list
 
     let mut arg_list = Vec::<String>::new();
@@ -93,7 +91,7 @@ pub fn crun_create(
     crun(arg_list)
 }
 
-pub fn crun_exec(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Exec) -> io::Result<()> {
+pub fn crun_exec(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Exec) -> Result<()> {
     // build crun argument list
 
     let mut arg_list = Vec::<String>::new();

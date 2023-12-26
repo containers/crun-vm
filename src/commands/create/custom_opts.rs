@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use std::io;
 use std::iter;
 use std::path::{Path, PathBuf};
 
+use anyhow::{anyhow, bail, Result};
 use clap::Parser;
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -20,7 +20,7 @@ pub struct VfioPciAddress {
 }
 
 impl VfioPciAddress {
-    fn from_sys_path(path: impl AsRef<Path>) -> io::Result<Self> {
+    fn from_sys_path(path: impl AsRef<Path>) -> Result<Self> {
         lazy_static! {
             static ref PATTERN: Regex = {
                 let h = r"[0-9a-fA-F]".to_string();
@@ -37,12 +37,9 @@ impl VfioPciAddress {
 
         let path = path.as_ref().canonicalize()?;
 
-        let capture = PATTERN.captures(path.as_str()).ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "not a valid vfio-pci device sysfs path",
-            )
-        })?;
+        let capture = PATTERN
+            .captures(path.as_str())
+            .ok_or_else(|| anyhow!("not a valid vfio-pci device sysfs path"))?;
 
         let address = VfioPciAddress {
             domain: u16::from_str_radix(&capture[2], 16).unwrap(),
@@ -59,7 +56,7 @@ impl VfioPciAddress {
 pub struct VfioPciMdevUuid(pub String);
 
 impl VfioPciMdevUuid {
-    fn from_sys_path(path: impl AsRef<Path>) -> io::Result<Self> {
+    fn from_sys_path(path: impl AsRef<Path>) -> Result<Self> {
         lazy_static! {
             static ref PATTERN: Regex = {
                 let h = r"[0-9a-zA-Z]".to_string();
@@ -75,12 +72,9 @@ impl VfioPciMdevUuid {
 
         let path = path.as_ref().canonicalize()?;
 
-        let capture = PATTERN.captures(path.as_str()).ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "not a valid vfio-pci mediated device sysfs path",
-            )
-        })?;
+        let capture = PATTERN
+            .captures(path.as_str())
+            .ok_or_else(|| anyhow!("not a valid vfio-pci mediated device sysfs path"))?;
 
         Ok(VfioPciMdevUuid(capture[2].to_string()))
     }
@@ -114,7 +108,7 @@ pub struct CustomOptions {
 }
 
 impl CustomOptions {
-    pub fn from_spec(spec: &oci_spec::runtime::Spec, env: RuntimeEnv) -> io::Result<Self> {
+    pub fn from_spec(spec: &oci_spec::runtime::Spec, env: RuntimeEnv) -> Result<Self> {
         let args = spec
             .process()
             .as_ref()
@@ -141,13 +135,13 @@ impl CustomOptions {
                 || any_is_relative(&options.vfio_pci)
                 || any_is_relative(&options.vfio_pci_mdev)
             {
-                return Err(io::Error::other(format!(
+                bail!(
                     concat!(
                         "paths specified using --cloud-init, --ignition, --vfio-pci, or",
                         " --vfio-pci-mdev must be absolute when using crun-qemu with {}",
                     ),
                     env.name().unwrap()
-                )));
+                );
             }
         }
 
@@ -155,7 +149,7 @@ impl CustomOptions {
             fn path_in_container_into_path_in_host(
                 spec: &oci_spec::runtime::Spec,
                 path: Option<&mut PathBuf>,
-            ) -> io::Result<()> {
+            ) -> Result<()> {
                 if let Some(path) = path {
                     let mount = spec
                         .mounts()
@@ -164,21 +158,13 @@ impl CustomOptions {
                         .filter(|m| m.source().is_some())
                         .filter(|m| path.starts_with(m.destination()))
                         .last()
-                        .ok_or_else(|| {
-                            io::Error::new(
-                                io::ErrorKind::InvalidInput,
-                                format!("can't find {}", path.as_str()),
-                            )
-                        })?;
+                        .ok_or_else(|| anyhow!("can't find {}", path.as_str()))?;
 
                     let relative_path = path.strip_prefix(mount.destination()).unwrap();
                     let path_in_host = mount.source().as_ref().unwrap().join(relative_path);
 
                     if !path_in_host.try_exists()? {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            format!("can't find {}", path.as_str()),
-                        ));
+                        bail!("can't find {}", path.as_str());
                     }
 
                     *path = path_in_host;
@@ -199,12 +185,12 @@ impl CustomOptions {
                 .vfio_pci
                 .iter()
                 .map(VfioPciAddress::from_sys_path)
-                .collect::<io::Result<_>>()?,
+                .collect::<Result<_>>()?,
             vfio_pci_mdev: options
                 .vfio_pci_mdev
                 .iter()
                 .map(VfioPciMdevUuid::from_sys_path)
-                .collect::<io::Result<_>>()?,
+                .collect::<Result<_>>()?,
         };
 
         Ok(options)

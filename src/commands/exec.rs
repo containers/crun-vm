@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use std::error::Error;
 use std::fs::File;
+
+use anyhow::Result;
 
 use crate::crun::crun_exec;
 
-pub fn exec(
-    global_args: &liboci_cli::GlobalOpts,
-    args: &liboci_cli::Exec,
-) -> Result<(), Box<dyn Error>> {
+pub fn exec(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Exec) -> Result<()> {
     assert!(args.command.is_empty());
 
     let process_config_path = args.process.as_ref().expect("process config");

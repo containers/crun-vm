@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use std::error::Error;
 use std::fs::File;
 use std::io::Write;
 
+use anyhow::Result;
 use sysinfo::SystemExt;
 use xml::writer::XmlEvent;
 
@@ -16,7 +16,7 @@ pub fn set_up_libvirt_domain_xml(
     vm_image_info: &VmImageInfo,
     mounts: &Mounts,
     custom_options: &CustomOptions,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<()> {
     let path = spec.root_path().join("crun-qemu/domain.xml");
 
     let mut w = xml::EmitterConfig::new()

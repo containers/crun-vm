@@ -5,6 +5,9 @@ edition = "2021"
 rust-version = "1.74"
 license = "GPL-2.0-or-later"
 
+[dependencies.anyhow]
+version = "1.0"
+
 [dependencies.clap]
 version = "4.0"
 default-features = false

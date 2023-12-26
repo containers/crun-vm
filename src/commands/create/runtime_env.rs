@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use std::fs;
-use std::io;
 use std::path::Path;
+
+use anyhow::Result;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RuntimeEnv {
@@ -15,7 +16,7 @@ impl RuntimeEnv {
     pub fn current(
         spec: &oci_spec::runtime::Spec,
         original_root_path: impl AsRef<Path>,
-    ) -> io::Result<RuntimeEnv> {
+    ) -> Result<RuntimeEnv> {
         let has_kubernetes_secrets_dir = spec.mounts().iter().flatten().any(|m| {
             m.destination()
                 .starts_with("/var/run/secrets/kubernetes.io")

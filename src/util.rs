@@ -8,6 +8,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+use anyhow::{bail, Result};
 use nix::mount::MsFlags;
 use serde::Deserialize;
 
@@ -25,7 +26,7 @@ impl<P: AsRef<Path>> PathExt for P {
     }
 }
 
-pub fn set_file_context(path: impl AsRef<Path>, context: &str) -> io::Result<()> {
+pub fn set_file_context(path: impl AsRef<Path>, context: &str) -> Result<()> {
     extern "C" {
         fn setfilecon(path: *const c_char, con: *const c_char) -> i32;
     }
@@ -34,13 +35,13 @@ pub fn set_file_context(path: impl AsRef<Path>, context: &str) -> io::Result<()>
     let context = CString::new(context.as_bytes())?;
 
     if unsafe { setfilecon(path.as_ptr(), context.as_ptr()) } != 0 {
-        return Err(io::Error::last_os_error());
+        return Err(io::Error::last_os_error().into());
     }
 
     Ok(())
 }
 
-pub fn bind_mount_file(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Result<()> {
+pub fn bind_mount_file(from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<()> {
     // ensure target exists
 
     if let Some(parent) = to.as_ref().parent() {
@@ -61,12 +62,12 @@ pub fn bind_mount_file(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Resu
         MsFlags::MS_BIND,
         Option::<&str>::None,
     ) {
-        return Err(io::Error::other(format!(
+        bail!(
             "mount({:?}, {:?}, NULL, MS_BIND, NULL) failed: {}",
             from.as_str(),
             to.as_str(),
             e
-        )));
+        );
     }
 
     Ok(())
@@ -86,7 +87,7 @@ pub fn bind_mount_dir_with_different_context(
     context: Option<&str>,
     propagate_changes: bool,
     private_dir: impl AsRef<Path>,
-) -> io::Result<()> {
+) -> Result<()> {
     let layer_dir = private_dir.as_ref().join("layer");
     let work_dir = private_dir.as_ref().join("work");
 
@@ -126,12 +127,12 @@ pub fn bind_mount_dir_with_different_context(
         MsFlags::empty(),
         Some(options.as_str()),
     ) {
-        return Err(io::Error::other(format!(
+        bail!(
             "mount(\"overlay\", {:?}, \"overlay\", 0, {:?}) failed: {}",
             to.as_str(),
             options,
-            e
-        )));
+            e,
+        );
     }
 
     // Make any necessary manual cleanup a bit easier by ensuring the workdir is accessible to the
@@ -251,7 +252,7 @@ impl SpecExt for oci_spec::runtime::Spec {
 pub fn find_single_file_in_dirs(
     dir_paths: impl IntoIterator<Item = impl AsRef<Path>>,
     ignore_files: &[impl AsRef<Path>],
-) -> io::Result<PathBuf> {
+) -> Result<PathBuf> {
     let mut candidate: Option<PathBuf> = None;
 
     for dir_path in dir_paths {
@@ -272,7 +273,7 @@ pub fn find_single_file_in_dirs(
                 }
 
                 if candidate.is_some() {
-                    return Err(io::Error::other("more than one file found"));
+                    bail!("more than one file found");
                 } else {
                     candidate = Some(path);
                 }
@@ -283,7 +284,7 @@ pub fn find_single_file_in_dirs(
     if let Some(path) = candidate {
         Ok(path)
     } else {
-        Err(io::Error::other("no files found"))
+        bail!("no files found");
     }
 }
 
@@ -299,7 +300,7 @@ pub struct VmImageInfo {
 }
 
 impl VmImageInfo {
-    pub fn of(vm_image_path: impl AsRef<Path>) -> io::Result<VmImageInfo> {
+    pub fn of(vm_image_path: impl AsRef<Path>) -> Result<VmImageInfo> {
         let vm_image_path = vm_image_path.as_ref().to_path_buf();
 
         let output = Command::new("qemu-img")
@@ -310,7 +311,7 @@ impl VmImageInfo {
             .output()?;
 
         if !output.status.success() {
-            return Err(io::Error::other("qemu-img failed"));
+            bail!("qemu-img failed");
         }
 
         let mut info: VmImageInfo = serde_json::from_slice(&output.stdout)?;
@@ -323,7 +324,7 @@ impl VmImageInfo {
 pub fn create_overlay_vm_image(
     overlay_vm_image_path: &Path,
     base_vm_image_info: &VmImageInfo,
-) -> io::Result<()> {
+) -> Result<()> {
     let status = Command::new("qemu-img")
         .arg("create")
         .arg("-q")
@@ -342,6 +343,6 @@ pub fn create_overlay_vm_image(
     if status.success() {
         Ok(())
     } else {
-        Err(io::Error::other("qemu-img failed"))
+        bail!("qemu-img failed");
     }
 }
