@@ -7,7 +7,7 @@ use crate::crun::crun_exec;
 
 pub fn exec(
     global_args: &liboci_cli::GlobalOpts,
-    args: &mut liboci_cli::Exec,
+    args: &liboci_cli::Exec,
 ) -> Result<(), Box<dyn Error>> {
     assert!(args.command.is_empty());
 

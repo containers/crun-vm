@@ -32,59 +32,61 @@ pub fn crun_create(
 ) -> io::Result<()> {
     // build crun argument list
 
-    let mut arg_list = Vec::new();
+    let mut arg_list = Vec::<String>::new();
+    let mut arg = |arg: &str| {
+        arg_list.push(arg.to_string());
+    };
 
     if global_args.debug {
-        arg_list.push("--debug");
+        arg("--debug");
     }
 
     if let Some(path) = &global_args.log {
-        arg_list.push("--log");
-        arg_list.push(path.as_str());
+        arg("--log");
+        arg(path.as_str());
     }
 
     if let Some(format) = &global_args.log_format {
-        arg_list.push("--log-format");
-        arg_list.push(format);
+        arg("--log-format");
+        arg(format);
     }
 
     if args.no_pivot {
-        arg_list.push("--no-pivot");
+        arg("--no-pivot");
     }
 
     if let Some(path) = &global_args.root {
-        arg_list.push("--root");
-        arg_list.push(path.as_str());
+        arg("--root");
+        arg(path.as_str());
     }
 
     if global_args.systemd_cgroup {
-        arg_list.push("--systemd-cgroup");
+        arg("--systemd-cgroup");
     }
 
-    arg_list.push("create");
+    arg("create");
 
-    arg_list.push("--bundle");
-    arg_list.push(args.bundle.as_str());
+    arg("--bundle");
+    arg(args.bundle.as_str());
 
     if let Some(path) = &args.console_socket {
-        arg_list.push("--console-socket");
-        arg_list.push(path.as_str());
+        arg("--console-socket");
+        arg(path.as_str());
     }
 
     if args.no_new_keyring {
-        arg_list.push("--no-new-keyring");
+        arg("--no-new-keyring");
     }
 
-    arg_list.push("--preserve-fds");
-    let preserve_fds = args.preserve_fds.to_string();
-    arg_list.push(&preserve_fds);
+    arg("--preserve-fds");
+    arg(&args.preserve_fds.to_string());
 
     if let Some(path) = &args.pid_file {
-        arg_list.push("--pid-file");
-        arg_list.push(path.as_str());
+        arg("--pid-file");
+        arg(path.as_str());
     }
 
-    arg_list.push(&args.container_id);
+    arg(&args.container_id);
 
     // run crun
 
@@ -95,101 +97,104 @@ pub fn crun_exec(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Exec) 
     // build crun argument list
 
     let mut arg_list = Vec::<String>::new();
+    let mut arg = |arg: &str| {
+        arg_list.push(arg.to_string());
+    };
 
     if global_args.debug {
-        arg_list.push("--debug".to_string());
+        arg("--debug");
     }
 
     if let Some(path) = &global_args.log {
-        arg_list.push("--log".to_string());
-        arg_list.push(path.as_string());
+        arg("--log");
+        arg(path.as_str());
     }
 
     if let Some(format) = &global_args.log_format {
-        arg_list.push("--log-format".to_string());
-        arg_list.push(format.clone());
+        arg("--log-format");
+        arg(format);
     }
 
     if let Some(path) = &global_args.root {
-        arg_list.push("--root".to_string());
-        arg_list.push(path.as_string());
+        arg("--root");
+        arg(path.as_str());
     }
 
     if global_args.systemd_cgroup {
-        arg_list.push("--systemd-cgroup".to_string());
+        arg("--systemd-cgroup");
     }
 
-    arg_list.push("exec".to_string());
+    arg("exec");
 
     if let Some(profile) = &args.apparmor {
-        arg_list.push("--apparmor".to_string());
-        arg_list.push(profile.clone());
+        arg("--apparmor");
+        arg(profile);
     }
 
     if let Some(path) = &args.console_socket {
-        arg_list.push("--console-socket".to_string());
-        arg_list.push(path.as_string());
+        arg("--console-socket");
+        arg(path.as_str());
     }
 
     if let Some(cwd) = &args.cwd {
-        arg_list.push("--cwd".to_string());
-        arg_list.push(cwd.as_string());
+        arg("--cwd");
+        arg(cwd.as_str());
     }
 
     for cap in &args.cap {
-        arg_list.push("--cap".to_string());
-        arg_list.push(cap.clone());
+        arg("--cap");
+        arg(cap);
     }
 
     if args.detach {
-        arg_list.push("--detach".to_string());
+        arg("--detach");
     }
 
     if let Some(path) = &args.cgroup {
-        arg_list.push("--cgroup".to_string());
-        arg_list.push(path.clone());
+        arg("--cgroup");
+        arg(path);
     }
 
     for (name, value) in &args.env {
-        arg_list.push("--env".to_string());
-        arg_list.push(format!("{name}={value}"));
+        arg("--env");
+        arg(&format!("{name}={value}"));
     }
 
     if args.no_new_privs {
-        arg_list.push("--no-new-privs".to_string());
+        arg("--no-new-privs");
     }
 
-    arg_list.push("--preserve-fds".to_string());
-    arg_list.push(args.preserve_fds.to_string());
+    arg("--preserve-fds");
+    arg(&args.preserve_fds.to_string());
 
     if let Some(path) = &args.process {
-        arg_list.push("--process".to_string());
-        arg_list.push(path.as_string());
+        arg("--process");
+        arg(path.as_str());
     }
 
     if let Some(label) = &args.process_label {
-        arg_list.push("--process-label".to_string());
-        arg_list.push(label.clone());
+        arg("--process-label");
+        arg(label);
     }
 
     if let Some(path) = &args.pid_file {
-        arg_list.push("--pid-file".to_string());
-        arg_list.push(path.as_string());
+        arg("--pid-file");
+        arg(path.as_str());
     }
 
     if args.tty {
-        arg_list.push("--tty".to_string());
+        arg("--tty");
     }
 
     if let Some((uid, gid)) = &args.user {
-        arg_list.push("--user".to_string());
-        arg_list.push(match gid {
+        arg("--user");
+        arg(&match gid {
             Some(gid) => format!("{uid}:{gid}"),
-            None => uid.to_string(),
+            None => format!("{uid}"),
         });
     }
 
-    arg_list.push(args.container_id.clone());
+    arg(&args.container_id);
 
     arg_list.extend(args.command.iter().cloned());
 

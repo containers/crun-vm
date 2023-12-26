@@ -51,8 +51,8 @@ where
             }
         }
         Command::Common(cmd) => {
-            if let liboci_cli::CommonCmd::Exec(mut exec_args) = *cmd {
-                return commands::exec::exec(&parsed_args.global, &mut exec_args);
+            if let liboci_cli::CommonCmd::Exec(exec_args) = *cmd {
+                return commands::exec::exec(&parsed_args.global, &exec_args);
             }
         }
     }
