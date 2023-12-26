@@ -4,6 +4,8 @@ use std::ffi::OsStr;
 use std::io;
 use std::process::Command;
 
+use crate::util::PathExt;
+
 /// Run `crun`.
 ///
 /// `crun` will inherit this process' standard streams.
@@ -38,7 +40,7 @@ pub fn crun_create(
 
     if let Some(path) = &global_args.log {
         arg_list.push("--log");
-        arg_list.push(path.to_str().expect("path is utf-8"));
+        arg_list.push(path.as_str());
     }
 
     if let Some(format) = &global_args.log_format {
@@ -52,7 +54,7 @@ pub fn crun_create(
 
     if let Some(path) = &global_args.root {
         arg_list.push("--root");
-        arg_list.push(path.to_str().expect("path is utf-8"));
+        arg_list.push(path.as_str());
     }
 
     if global_args.systemd_cgroup {
@@ -62,11 +64,11 @@ pub fn crun_create(
     arg_list.push("create");
 
     arg_list.push("--bundle");
-    arg_list.push(args.bundle.to_str().expect("path is utf-8"));
+    arg_list.push(args.bundle.as_str());
 
     if let Some(path) = &args.console_socket {
         arg_list.push("--console-socket");
-        arg_list.push(path.to_str().expect("path is utf-8"));
+        arg_list.push(path.as_str());
     }
 
     if args.no_new_keyring {
@@ -79,7 +81,7 @@ pub fn crun_create(
 
     if let Some(path) = &args.pid_file {
         arg_list.push("--pid-file");
-        arg_list.push(path.to_str().expect("path is utf-8"));
+        arg_list.push(path.as_str());
     }
 
     arg_list.push(&args.container_id);
@@ -100,7 +102,7 @@ pub fn crun_exec(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Exec) 
 
     if let Some(path) = &global_args.log {
         arg_list.push("--log".to_string());
-        arg_list.push(path.to_str().expect("path is utf-8").to_string());
+        arg_list.push(path.as_string());
     }
 
     if let Some(format) = &global_args.log_format {
@@ -110,7 +112,7 @@ pub fn crun_exec(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Exec) 
 
     if let Some(path) = &global_args.root {
         arg_list.push("--root".to_string());
-        arg_list.push(path.to_str().expect("path is utf-8").to_string());
+        arg_list.push(path.as_string());
     }
 
     if global_args.systemd_cgroup {
@@ -126,12 +128,12 @@ pub fn crun_exec(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Exec) 
 
     if let Some(path) = &args.console_socket {
         arg_list.push("--console-socket".to_string());
-        arg_list.push(path.to_str().expect("path is utf-8").to_string());
+        arg_list.push(path.as_string());
     }
 
     if let Some(cwd) = &args.cwd {
         arg_list.push("--cwd".to_string());
-        arg_list.push(cwd.to_str().expect("path is utf-8").to_string());
+        arg_list.push(cwd.as_string());
     }
 
     for cap in &args.cap {
@@ -162,7 +164,7 @@ pub fn crun_exec(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Exec) 
 
     if let Some(path) = &args.process {
         arg_list.push("--process".to_string());
-        arg_list.push(path.to_str().expect("path is utf-8").to_string());
+        arg_list.push(path.as_string());
     }
 
     if let Some(label) = &args.process_label {
@@ -172,7 +174,7 @@ pub fn crun_exec(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Exec) 
 
     if let Some(path) = &args.pid_file {
         arg_list.push("--pid-file".to_string());
-        arg_list.push(path.to_str().expect("path is utf-8").to_string());
+        arg_list.push(path.as_string());
     }
 
     if args.tty {

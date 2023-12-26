@@ -9,7 +9,7 @@ use xml::writer::XmlEvent;
 
 use crate::commands::create::custom_opts::{CustomOptions, VfioPciMdevUuid};
 use crate::commands::create::Mounts;
-use crate::util::{SpecExt, VmImageInfo};
+use crate::util::{PathExt, SpecExt, VmImageInfo};
 
 pub fn set_up_libvirt_domain_xml(
     spec: &oci_spec::runtime::Spec,
@@ -87,11 +87,7 @@ pub fn set_up_libvirt_domain_xml(
                     "driver",
                     &[("name", "qemu"), ("type", &vm_image_info.format)],
                 )?;
-                se(
-                    w,
-                    "source",
-                    &[("file", vm_image_info.path.to_str().unwrap())],
-                )?;
+                se(w, "source", &[("file", vm_image_info.path.as_str())])?;
                 Ok(())
             })?;
 
@@ -104,7 +100,7 @@ pub fn set_up_libvirt_domain_xml(
                     se(
                         w,
                         "source",
-                        &[(source_attr, dev.path_in_container.to_str().unwrap())],
+                        &[(source_attr, dev.path_in_container.as_str())],
                     )?;
                     if dev.readonly {
                         se(w, "readonly", &[])?;
@@ -133,7 +129,7 @@ pub fn set_up_libvirt_domain_xml(
             })?;
 
             for (i, mount) in mounts.virtiofs.iter().enumerate() {
-                let path = mount.path_in_container.to_str().unwrap();
+                let path = mount.path_in_container.as_str();
                 let tag = format!("virtiofs-{}", i);
 
                 s(w, "filesystem", &[("type", "mount")], |w| {

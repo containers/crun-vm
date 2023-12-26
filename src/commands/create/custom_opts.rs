@@ -9,6 +9,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 
 use crate::commands::create::runtime_env::RuntimeEnv;
+use crate::util::PathExt;
 
 #[derive(Debug)]
 pub struct VfioPciAddress {
@@ -35,11 +36,8 @@ impl VfioPciAddress {
         }
 
         let path = path.as_ref().canonicalize()?;
-        let path = path
-            .to_str()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "path is not utf-8"))?;
 
-        let capture = PATTERN.captures(path).ok_or_else(|| {
+        let capture = PATTERN.captures(path.as_str()).ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "not a valid vfio-pci device sysfs path",
@@ -76,11 +74,8 @@ impl VfioPciMdevUuid {
         }
 
         let path = path.as_ref().canonicalize()?;
-        let path = path
-            .to_str()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "path is not utf-8"))?;
 
-        let capture = PATTERN.captures(path).ok_or_else(|| {
+        let capture = PATTERN.captures(path.as_str()).ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "not a valid vfio-pci mediated device sysfs path",
@@ -172,7 +167,7 @@ impl CustomOptions {
                         .ok_or_else(|| {
                             io::Error::new(
                                 io::ErrorKind::InvalidInput,
-                                format!("can't find {}", path.to_str().unwrap()),
+                                format!("can't find {}", path.as_str()),
                             )
                         })?;
 
@@ -182,7 +177,7 @@ impl CustomOptions {
                     if !path_in_host.try_exists()? {
                         return Err(io::Error::new(
                             io::ErrorKind::InvalidInput,
-                            format!("can't find {}", path.to_str().unwrap()),
+                            format!("can't find {}", path.as_str()),
                         ));
                     }
 

@@ -11,6 +11,20 @@ use std::process::{Command, Stdio};
 use nix::mount::MsFlags;
 use serde::Deserialize;
 
+pub trait PathExt {
+    fn as_str(&self) -> &str;
+
+    fn as_string(&self) -> String {
+        self.as_str().to_string()
+    }
+}
+
+impl<P: AsRef<Path>> PathExt for P {
+    fn as_str(&self) -> &str {
+        self.as_ref().to_str().expect("path is utf-8")
+    }
+}
+
 pub fn set_file_context(path: impl AsRef<Path>, context: &str) -> io::Result<()> {
     extern "C" {
         fn setfilecon(path: *const c_char, con: *const c_char) -> i32;
@@ -49,8 +63,8 @@ pub fn bind_mount_file(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Resu
     ) {
         return Err(io::Error::other(format!(
             "mount({:?}, {:?}, NULL, MS_BIND, NULL) failed: {}",
-            from.as_ref().to_str().unwrap(),
-            to.as_ref().to_str().unwrap(),
+            from.as_str(),
+            to.as_str(),
             e
         )));
     }
@@ -96,9 +110,9 @@ pub fn bind_mount_dir_with_different_context(
 
     let mut options = format!(
         "lowerdir={},upperdir={},workdir={}",
-        escape_path(lower_dir.to_str().unwrap()),
-        escape_path(upper_dir.to_str().unwrap()),
-        escape_path(work_dir.to_str().unwrap()),
+        escape_path(lower_dir.as_str()),
+        escape_path(upper_dir.as_str()),
+        escape_path(work_dir.as_str()),
     );
 
     if let Some(context) = context {
@@ -114,7 +128,7 @@ pub fn bind_mount_dir_with_different_context(
     ) {
         return Err(io::Error::other(format!(
             "mount(\"overlay\", {:?}, \"overlay\", 0, {:?}) failed: {}",
-            to.as_ref().to_str().unwrap(),
+            to.as_str(),
             options,
             e
         )));

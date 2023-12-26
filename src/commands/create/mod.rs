@@ -21,7 +21,7 @@ use crate::commands::create::runtime_env::RuntimeEnv;
 use crate::crun::crun_create;
 use crate::util::{
     bind_mount_dir_with_different_context, bind_mount_file, create_overlay_vm_image,
-    find_single_file_in_dirs, set_file_context, SpecExt, VmImageInfo,
+    find_single_file_in_dirs, set_file_context, PathExt, SpecExt, VmImageInfo,
 };
 
 pub fn create(
@@ -130,8 +130,7 @@ fn set_up_vm_image(
         let vm_image_dir_path = vm_image_path_in_host.parent().unwrap();
         let vm_image_dir_name = vm_image_dir_path.file_name().unwrap();
 
-        let overlay_private_dir_name =
-            format!(".crun-qemu.{}.tmp", vm_image_dir_name.to_str().unwrap());
+        let overlay_private_dir_name = format!(".crun-qemu.{}.tmp", vm_image_dir_name.as_str());
         let overlay_private_dir_path = vm_image_dir_path
             .parent()
             .unwrap()

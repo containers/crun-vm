@@ -7,6 +7,7 @@ use std::path::Path;
 use std::process::Command;
 
 use crate::commands::create::Mounts;
+use crate::util::PathExt;
 
 pub struct FirstBootConfig<'a> {
     pub hostname: Option<&'a str>,
@@ -90,7 +91,7 @@ impl FirstBootConfig<'_> {
             };
 
             let mut add_mount = |typ: &str, tag: &str, path_in_guest: &Path| {
-                let path_in_guest = path_in_guest.to_str().unwrap();
+                let path_in_guest = path_in_guest.as_str();
                 mounts.push(vec![&tag, path_in_guest, typ, "defaults", "0", "0"].into());
             };
 
@@ -136,7 +137,7 @@ impl FirstBootConfig<'_> {
 
             for (i, dev) in self.mounts.block_device.iter().enumerate() {
                 let parent = match dev.path_in_guest.parent() {
-                    Some(path) if path.to_str() != Some("") => Some(path),
+                    Some(path) if !path.as_str().is_empty() => Some(path),
                     _ => None,
                 };
 
@@ -144,7 +145,7 @@ impl FirstBootConfig<'_> {
                     runcmd.push(serde_yaml::Value::Sequence(vec![
                         "mkdir".into(),
                         "-p".into(),
-                        parent.to_str().expect("path is utf-8").into(),
+                        parent.as_str().into(),
                     ]));
                 }
 
@@ -152,7 +153,7 @@ impl FirstBootConfig<'_> {
                     "ln".into(),
                     "--symbolic".into(),
                     format!("/dev/disk/by-id/virtio-crun-qemu-block-{i}").into(),
-                    dev.path_in_guest.to_str().expect("path is utf-8").into(),
+                    dev.path_in_guest.as_str().into(),
                 ]));
             }
         }
@@ -338,7 +339,7 @@ impl FirstBootConfig<'_> {
         };
 
         let mut add_mount = |typ: &str, tag: &str, path_in_guest: &Path| {
-            let path_in_guest = path_in_guest.to_str().unwrap();
+            let path_in_guest = path_in_guest.as_str();
 
             // systemd insists on this unit file name format
             let systemd_unit_file_name = format!(
