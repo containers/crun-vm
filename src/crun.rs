@@ -3,7 +3,7 @@
 use std::ffi::OsStr;
 use std::process::Command;
 
-use anyhow::{bail, Result};
+use anyhow::{ensure, Result};
 
 use crate::util::PathExt;
 
@@ -20,9 +20,7 @@ where
 {
     let status = Command::new("crun").args(args).spawn()?.wait()?;
 
-    if !status.success() {
-        bail!("crun failed");
-    }
+    ensure!(status.success(), "crun failed");
 
     Ok(())
 }

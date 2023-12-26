@@ -8,7 +8,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, ensure, Result};
 use nix::mount::MsFlags;
 use serde::Deserialize;
 
@@ -272,20 +272,14 @@ pub fn find_single_file_in_dirs(
                     continue; // file is in `ignore_files`
                 }
 
-                if candidate.is_some() {
-                    bail!("more than one file found");
-                } else {
-                    candidate = Some(path);
-                }
+                ensure!(candidate.is_none(), "more than one file found");
+
+                candidate = Some(path);
             }
         }
     }
 
-    if let Some(path) = candidate {
-        Ok(path)
-    } else {
-        bail!("no files found");
-    }
+    candidate.ok_or_else(|| anyhow!("no files found"))
 }
 
 #[derive(Deserialize)]
@@ -310,9 +304,7 @@ impl VmImageInfo {
             .stdout(Stdio::piped())
             .output()?;
 
-        if !output.status.success() {
-            bail!("qemu-img failed");
-        }
+        ensure!(output.status.success(), "`qemu-img info` failed");
 
         let mut info: VmImageInfo = serde_json::from_slice(&output.stdout)?;
         info.path = vm_image_path;
@@ -340,9 +332,7 @@ pub fn create_overlay_vm_image(
         .spawn()?
         .wait()?;
 
-    if status.success() {
-        Ok(())
-    } else {
-        bail!("qemu-img failed");
-    }
+    ensure!(status.success(), "`qemu-img create` failed");
+
+    Ok(())
 }

@@ -5,7 +5,7 @@ use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, ensure, Result};
 
 use crate::commands::create::Mounts;
 use crate::util::PathExt;
@@ -36,9 +36,10 @@ impl FirstBootConfig<'_> {
                     // TODO: Potential security vulnerability, symlink may point to somewhere on
                     // host that user isn't normally able to access, especially when running as a
                     // Kubernetes runtime.
-                    if !user_path.metadata()?.is_file() {
-                        bail!("cloud-init: expected {file} to be a regular file");
-                    }
+                    ensure!(
+                        user_path.metadata()?.is_file(),
+                        "cloud-init: expected {file} to be a regular file"
+                    );
 
                     fs::copy(user_path, &path)?;
                     continue;
@@ -57,9 +58,10 @@ impl FirstBootConfig<'_> {
         let user_data = fs::read_to_string(&user_data_path)?;
 
         if let Some(line) = user_data.lines().next() {
-            if line.trim() != "#cloud-config" {
-                bail!("cloud-init: expected shebang '#cloud-config' in user-data file");
-            }
+            ensure!(
+                line.trim() == "#cloud-config",
+                "cloud-init: expected shebang '#cloud-config' in user-data file"
+            );
         }
 
         let mut user_data: serde_yaml::Value = serde_yaml::from_str(&user_data)
@@ -175,9 +177,7 @@ impl FirstBootConfig<'_> {
             .spawn()?
             .wait()?;
 
-        if !status.success() {
-            bail!("genisoimage failed");
-        }
+        ensure!(status.success(), "genisoimage failed");
 
         Ok(())
     }

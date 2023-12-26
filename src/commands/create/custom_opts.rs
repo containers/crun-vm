@@ -3,7 +3,7 @@
 use std::iter;
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, ensure, Result};
 use clap::Parser;
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -163,9 +163,7 @@ impl CustomOptions {
                     let relative_path = path.strip_prefix(mount.destination()).unwrap();
                     let path_in_host = mount.source().as_ref().unwrap().join(relative_path);
 
-                    if !path_in_host.try_exists()? {
-                        bail!("can't find {}", path.as_str());
-                    }
+                    ensure!(path_in_host.try_exists()?, "can't find {}", path.as_str());
 
                     *path = path_in_host;
                 }

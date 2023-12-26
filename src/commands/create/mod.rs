@@ -10,7 +10,7 @@ use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, ensure, Result};
 use nix::sys::stat::{major, makedev, minor, mknod, Mode, SFlag};
 
 use crate::commands::create::custom_opts::CustomOptions;
@@ -449,9 +449,7 @@ fn generate_container_ssh_key_pair(spec: &oci_spec::runtime::Spec) -> Result<Str
         .spawn()?
         .wait()?;
 
-    if !status.success() {
-        bail!("ssh-keygen failed");
-    }
+    ensure!(status.success(), "ssh-keygen failed");
 
     let public_key = fs::read_to_string(spec.root_path().join("root/.ssh/id_rsa.pub"))?;
 
