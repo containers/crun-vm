@@ -2,7 +2,7 @@
 
 use std::fs::{self, File};
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{anyhow, bail, ensure, Result};
@@ -138,38 +138,54 @@ impl FirstBootConfig<'_> {
 
         ssh_authorized_keys.push(self.container_public_key.into());
 
-        // create block device symlinks
+        // create block device symlinks and udev rules
 
-        if !self.mounts.block_device.is_empty() {
+        let block_device_symlinks = self.get_block_device_symlinks();
+        let block_device_udev_rules = self.get_block_device_udev_rules();
+
+        if !block_device_symlinks.is_empty() || block_device_udev_rules.is_some() {
             let runcmd = match user_data_mapping
                 .entry("runcmd".into())
                 .or_insert_with(|| serde_yaml::Value::Sequence(vec![]))
             {
-                serde_yaml::Value::Sequence(cmds) => cmds,
+                serde_yaml::Value::Sequence(v) => v,
                 _ => bail!("cloud-init: invalid user-data file"),
             };
 
-            for (i, dev) in self.mounts.block_device.iter().enumerate() {
-                let parent = match dev.path_in_guest.parent() {
-                    Some(path) if !path.as_str().is_empty() => Some(path),
-                    _ => None,
-                };
-
-                if let Some(parent) = parent {
-                    runcmd.push(serde_yaml::Value::Sequence(vec![
-                        "mkdir".into(),
-                        "-p".into(),
-                        parent.as_str().into(),
-                    ]));
-                }
+            for (path, target) in block_device_symlinks {
+                runcmd.push(serde_yaml::Value::Sequence(vec![
+                    "mkdir".into(),
+                    "-p".into(),
+                    path.parent().unwrap().as_str().into(),
+                ]));
 
                 runcmd.push(serde_yaml::Value::Sequence(vec![
                     "ln".into(),
                     "--symbolic".into(),
-                    format!("/dev/disk/by-id/virtio-crun-qemu-block-{i}").into(),
-                    dev.path_in_guest.as_str().into(),
+                    target.as_str().into(),
+                    path.as_str().into(),
                 ]));
             }
+
+            if block_device_udev_rules.is_some() {
+                runcmd.push("udevadm trigger".into());
+            }
+        }
+
+        if let Some(rules) = block_device_udev_rules {
+            let write_files = match user_data_mapping
+                .entry("write_files".into())
+                .or_insert_with(|| serde_yaml::Value::Sequence(vec![]))
+            {
+                serde_yaml::Value::Sequence(v) => v,
+                _ => bail!("cloud-init: invalid user-data file"),
+            };
+
+            let mut mapping = serde_yaml::Mapping::new();
+            mapping.insert("path".into(), "/etc/udev/rules.d/99-crun-qemu.rules".into());
+            mapping.insert("content".into(), rules.into());
+
+            write_files.push(mapping.into());
         }
 
         // generate iso
@@ -305,7 +321,7 @@ impl FirstBootConfig<'_> {
 
             files.push(serde_json::json!({
                 "path": "/etc/hostname",
-                "mode": 420,
+                "mode": 0o644,
                 "overwrite": true,
                 "contents": {
                     "source": format!("data:,{}", hostname)
@@ -313,7 +329,18 @@ impl FirstBootConfig<'_> {
             }));
         }
 
-        // create block device symlinks
+        // create block device symlinks and udev rules
+
+        if let Some(rules) = self.get_block_device_udev_rules() {
+            files.push(serde_json::json!({
+                "path": "/etc/udev/rules.d/99-crun-qemu.rules",
+                "mode": 0o644,
+                "overwrite": true,
+                "contents": {
+                    "source": format!("data:,{}", urlencoding::encode(&rules))
+                }
+            }));
+        }
 
         let links = match storage
             .entry("links")
@@ -323,11 +350,12 @@ impl FirstBootConfig<'_> {
             _ => bail!("ignition: invalid config file"),
         };
 
-        for (i, dev) in self.mounts.block_device.iter().enumerate() {
+        let block_device_symlinks = self.get_block_device_symlinks();
+        for (path, target) in block_device_symlinks {
             links.push(serde_json::json!({
-                "path": dev.path_in_guest,
+                "path": path.as_str(),
                 "overwrite": true,
-                "target": format!("/dev/disk/by-id/virtio-crun-qemu-block-{i}"),
+                "target": target.as_str(),
                 "hard": false,
             }));
         }
@@ -391,5 +419,38 @@ impl FirstBootConfig<'_> {
         serde_json::to_writer(File::create(&out_config_file_path)?, &user_data)?;
 
         Ok(())
+    }
+
+    fn get_block_device_symlinks(&self) -> Vec<(&Path, PathBuf)> {
+        let mut symlinks = Vec::new();
+
+        for (i, dev) in self.mounts.block_device.iter().enumerate() {
+            if dev.path_in_guest.parent() != Some(Path::new("/dev")) {
+                let target = PathBuf::from(format!("/dev/disk/by-id/virtio-crun-qemu-block-{i}"));
+                symlinks.push((dev.path_in_guest.as_path(), target));
+            }
+        }
+
+        symlinks
+    }
+
+    fn get_block_device_udev_rules(&self) -> Option<String> {
+        let mut rules = String::new();
+
+        for (i, dev) in self.mounts.block_device.iter().enumerate() {
+            if dev.path_in_guest.parent() == Some(Path::new("/dev")) {
+                rules.push_str(&format!(
+                    "ENV{{ID_SERIAL}}==\"crun-qemu-block-{}\", SYMLINK+=\"{}\"\n",
+                    i,
+                    dev.path_in_guest.file_name().unwrap().as_str(),
+                ));
+            }
+        }
+
+        if rules.is_empty() {
+            None
+        } else {
+            Some(rules)
+        }
     }
 }

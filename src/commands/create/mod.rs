@@ -212,34 +212,29 @@ fn set_up_mounts(spec: &mut oci_spec::runtime::Spec, mounts: &mut Mounts) -> Res
         "/sys/fs/cgroup",
     ];
 
-    const TARGET_PREFIXES_TO_IGNORE: &[&str] = &["/dev"];
-
     let mut new_oci_mounts: Vec<oci_spec::runtime::Mount> = vec![];
 
     for oci_mount in spec.mounts().iter().flatten() {
-        let is_in_targets_to_ignore = TARGETS_TO_IGNORE
+        if TARGETS_TO_IGNORE
             .iter()
-            .any(|path| oci_mount.destination() == Path::new(path));
-
-        let is_in_target_prefixes_to_ignore = TARGET_PREFIXES_TO_IGNORE
-            .iter()
-            .any(|prefix| oci_mount.destination().starts_with(prefix));
-
-        if is_in_targets_to_ignore || is_in_target_prefixes_to_ignore {
+            .any(|path| oci_mount.destination() == Path::new(path))
+        {
             new_oci_mounts.push(oci_mount.clone());
             continue;
         }
 
         match oci_mount.typ().as_deref() {
             Some("bind") => {
-                let meta = match oci_mount.source() {
-                    Some(source) => source.metadata()?,
-                    None => continue,
-                };
+                let meta = oci_mount.source().as_ref().unwrap().metadata()?;
 
                 let path_in_container;
 
                 if meta.file_type().is_dir() {
+                    if oci_mount.destination().starts_with("/dev") {
+                        new_oci_mounts.push(oci_mount.clone());
+                        continue;
+                    }
+
                     path_in_container = PathBuf::from(format!(
                         "/crun-qemu/mounts/virtiofs/{}",
                         mounts.virtiofs.len()
@@ -279,13 +274,18 @@ fn set_up_mounts(spec: &mut oci_spec::runtime::Spec, mounts: &mut Mounts) -> Res
                 new_oci_mounts.push(new_mount);
             }
             Some("tmpfs") => {
+                if oci_mount.destination().starts_with("/dev") {
+                    new_oci_mounts.push(oci_mount.clone());
+                    continue;
+                }
+
                 // don't actually mount it in the container
 
                 let path_in_guest = oci_mount.destination().clone();
                 mounts.tmpfs.push(TmpfsMount { path_in_guest });
             }
             _ => {
-                bail!("only bind and tmpfs mounts are supported");
+                new_oci_mounts.push(oci_mount.clone());
             }
         }
     }
