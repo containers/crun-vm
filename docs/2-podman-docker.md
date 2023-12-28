@@ -123,6 +123,17 @@ $ podman run \
 You should now be able to log in with the default `fedora` username and password
 `pass`.
 
+Alternatively, to simply set the password for one or more existing users, you
+can pass in `--password <user>:<password>`:
+
+```console
+$ podman run \
+    --runtime crun-qemu \
+    -it --rm \
+    quay.io/containerdisks/fedora:39 \
+    --password fedora:pass
+```
+
 ### Ignition
 
 Similarly, you can provide an [Ignition] configuration to the VM by passing in
@@ -141,6 +152,9 @@ $ podman run \
 
 You should now be able to log in with the default `core` username and password
 `pass`.
+
+Note that the `--password` option requires cloud-init support and doesn't work
+if the VM uses Ignition.
 
 ## SSH'ing into the VM
 

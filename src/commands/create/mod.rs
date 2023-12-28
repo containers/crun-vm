@@ -420,6 +420,7 @@ fn set_up_first_boot_config(
     let config = FirstBootConfig {
         hostname: spec.hostname().as_deref(),
         container_public_key: &container_public_key,
+        passwords: custom_options.passwords.clone(),
         mounts,
     };
 

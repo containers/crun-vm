@@ -2,6 +2,7 @@
 
 use std::iter;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use anyhow::{anyhow, bail, ensure, Result};
 use clap::Parser;
@@ -80,6 +81,31 @@ impl VfioPciMdevUuid {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct UserPassword {
+    pub username: String,
+    pub password: String,
+}
+
+impl FromStr for UserPassword {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        lazy_static! {
+            static ref PATTERN: Regex = Regex::new(r"^([^:]+):(.*)$").unwrap();
+        }
+
+        let capture = PATTERN
+            .captures(s)
+            .ok_or_else(|| anyhow!("expected <user>:<password>"))?;
+
+        Ok(Self {
+            username: capture[1].to_string(),
+            password: capture[2].to_string(),
+        })
+    }
+}
+
 #[derive(clap::Parser, Debug)]
 struct CustomOptionsRaw {
     #[clap(long)]
@@ -96,6 +122,9 @@ struct CustomOptionsRaw {
 
     #[clap(long)]
     vfio_pci_mdev: Vec<PathBuf>,
+
+    #[clap(long)]
+    password: Vec<UserPassword>,
 }
 
 #[derive(Debug)]
@@ -105,6 +134,7 @@ pub struct CustomOptions {
     pub ignition: Option<PathBuf>,
     pub vfio_pci: Vec<VfioPciAddress>,
     pub vfio_pci_mdev: Vec<VfioPciMdevUuid>,
+    pub passwords: Vec<UserPassword>,
 }
 
 impl CustomOptions {
@@ -175,20 +205,25 @@ impl CustomOptions {
             path_in_container_into_path_in_host(spec, options.ignition.as_mut())?;
         }
 
+        let vfio_pci = options
+            .vfio_pci
+            .iter()
+            .map(VfioPciAddress::from_sys_path)
+            .collect::<Result<_>>()?;
+
+        let vfio_pci_mdev = options
+            .vfio_pci_mdev
+            .iter()
+            .map(VfioPciMdevUuid::from_sys_path)
+            .collect::<Result<_>>()?;
+
         let options = CustomOptions {
             persist_changes: options.persist_changes,
             cloud_init: options.cloud_init,
             ignition: options.ignition,
-            vfio_pci: options
-                .vfio_pci
-                .iter()
-                .map(VfioPciAddress::from_sys_path)
-                .collect::<Result<_>>()?,
-            vfio_pci_mdev: options
-                .vfio_pci_mdev
-                .iter()
-                .map(VfioPciMdevUuid::from_sys_path)
-                .collect::<Result<_>>()?,
+            vfio_pci,
+            vfio_pci_mdev,
+            passwords: options.password,
         };
 
         Ok(options)
