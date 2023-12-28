@@ -85,31 +85,6 @@ impl FromStr for VfioPciMdevUuid {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct UserPassword {
-    pub username: String,
-    pub password: String,
-}
-
-impl FromStr for UserPassword {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self> {
-        lazy_static! {
-            static ref PATTERN: Regex = Regex::new(r"^([^:]+):(.*)$").unwrap();
-        }
-
-        let capture = PATTERN
-            .captures(s)
-            .ok_or_else(|| anyhow!("expected <user>:<password>"))?;
-
-        Ok(Self {
-            username: capture[1].to_string(),
-            password: capture[2].to_string(),
-        })
-    }
-}
-
 #[derive(clap::Parser, Debug)]
 pub struct CustomOptions {
     #[clap(long)]
@@ -127,8 +102,8 @@ pub struct CustomOptions {
     #[clap(long)]
     pub vfio_pci_mdev: Vec<VfioPciMdevUuid>,
 
-    #[clap(long = "password")]
-    pub passwords: Vec<UserPassword>,
+    #[clap(long)]
+    pub password: Option<String>,
 }
 
 impl CustomOptions {

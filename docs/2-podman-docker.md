@@ -123,15 +123,15 @@ $ podman run \
 You should now be able to log in with the default `fedora` username and password
 `pass`.
 
-Alternatively, to simply set the password for one or more existing users, you
-can pass in `--password <user>:<password>`:
+Alternatively, you can set the default user's password with the `--password`
+option:
 
 ```console
 $ podman run \
     --runtime crun-qemu \
     -it --rm \
     quay.io/containerdisks/fedora:39 \
-    --password fedora:pass
+    --password pass
 ```
 
 ### Ignition

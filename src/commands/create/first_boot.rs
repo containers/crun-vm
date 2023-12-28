@@ -7,14 +7,13 @@ use std::process::Command;
 
 use anyhow::{anyhow, bail, ensure, Result};
 
-use crate::commands::create::custom_opts::UserPassword;
 use crate::commands::create::Mounts;
 use crate::util::PathExt;
 
 pub struct FirstBootConfig<'a> {
     pub hostname: Option<&'a str>,
     pub container_public_key: &'a str,
-    pub passwords: Vec<UserPassword>,
+    pub password: Option<&'a str>,
     pub mounts: &'a Mounts,
 }
 
@@ -80,23 +79,18 @@ impl FirstBootConfig<'_> {
 
         // set user passwords
 
-        if !self.passwords.is_empty() {
-            let users = match user_data_mapping
-                .entry("users".into())
-                .or_insert_with(|| serde_yaml::Value::Sequence(vec![]))
+        if let Some(password) = self.password {
+            user_data_mapping.insert("password".into(), password.into());
+
+            let chpasswd = match user_data_mapping
+                .entry("chpasswd".into())
+                .or_insert_with(|| serde_yaml::Value::Mapping(serde_yaml::Mapping::new()))
             {
-                serde_yaml::Value::Sequence(keys) => keys,
+                serde_yaml::Value::Mapping(m) => m,
                 _ => bail!("cloud-init: invalid user-data file"),
             };
 
-            for up in &self.passwords {
-                let mut mapping = serde_yaml::Mapping::new();
-                mapping.insert("name".into(), up.username.clone().into());
-                mapping.insert("plain_text_passwd".into(), up.password.clone().into());
-                mapping.insert("lock_passwd".into(), false.into());
-
-                users.insert(0, mapping.into());
-            }
+            chpasswd.insert("expire".into(), false.into());
         }
 
         // adjust mounts
