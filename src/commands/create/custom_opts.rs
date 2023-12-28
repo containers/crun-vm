@@ -12,7 +12,7 @@ use regex::Regex;
 use crate::commands::create::runtime_env::RuntimeEnv;
 use crate::util::PathExt;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct VfioPciAddress {
     pub domain: u16,
     pub bus: u8,
@@ -20,8 +20,10 @@ pub struct VfioPciAddress {
     pub function: u8,
 }
 
-impl VfioPciAddress {
-    fn from_sys_path(path: impl AsRef<Path>) -> Result<Self> {
+impl FromStr for VfioPciAddress {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
         lazy_static! {
             static ref PATTERN: Regex = {
                 let h = r"[0-9a-fA-F]".to_string();
@@ -36,7 +38,7 @@ impl VfioPciAddress {
             };
         }
 
-        let path = path.as_ref().canonicalize()?;
+        let path = Path::new(s).canonicalize()?;
 
         let capture = PATTERN
             .captures(path.as_str())
@@ -53,11 +55,13 @@ impl VfioPciAddress {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct VfioPciMdevUuid(pub String);
 
-impl VfioPciMdevUuid {
-    fn from_sys_path(path: impl AsRef<Path>) -> Result<Self> {
+impl FromStr for VfioPciMdevUuid {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
         lazy_static! {
             static ref PATTERN: Regex = {
                 let h = r"[0-9a-zA-Z]".to_string();
@@ -71,7 +75,7 @@ impl VfioPciMdevUuid {
             };
         }
 
-        let path = path.as_ref().canonicalize()?;
+        let path = Path::new(s).canonicalize()?;
 
         let capture = PATTERN
             .captures(path.as_str())
@@ -107,33 +111,23 @@ impl FromStr for UserPassword {
 }
 
 #[derive(clap::Parser, Debug)]
-struct CustomOptionsRaw {
-    #[clap(long)]
-    persist_changes: bool,
-
-    #[clap(long)]
-    cloud_init: Option<PathBuf>,
-
-    #[clap(long)]
-    ignition: Option<PathBuf>,
-
-    #[clap(long)]
-    vfio_pci: Vec<PathBuf>,
-
-    #[clap(long)]
-    vfio_pci_mdev: Vec<PathBuf>,
-
-    #[clap(long)]
-    password: Vec<UserPassword>,
-}
-
-#[derive(Debug)]
 pub struct CustomOptions {
+    #[clap(long)]
     pub persist_changes: bool,
+
+    #[clap(long)]
     pub cloud_init: Option<PathBuf>,
+
+    #[clap(long)]
     pub ignition: Option<PathBuf>,
+
+    #[clap(long)]
     pub vfio_pci: Vec<VfioPciAddress>,
+
+    #[clap(long)]
     pub vfio_pci_mdev: Vec<VfioPciMdevUuid>,
+
+    #[clap(long = "password")]
     pub passwords: Vec<UserPassword>,
 }
 
@@ -151,8 +145,8 @@ impl CustomOptions {
         // TODO: We currently assume that no entrypoint is given (either by being set by in the
         // container image or through --entrypoint). Must somehow find whether the first arg is the
         // entrypoint and ignore it in that case.
-        let mut options = CustomOptionsRaw::parse_from(
-            iter::once(&"podman run ... <image>".to_string()).chain(args),
+        let mut options = CustomOptions::parse_from(
+            iter::once(&"podman run [<podman-opts>] <image>".to_string()).chain(args),
         );
 
         if env.needs_absolute_custom_opt_paths() {
@@ -160,15 +154,11 @@ impl CustomOptions {
                 iter.into_iter().any(|p| p.as_ref().is_relative())
             }
 
-            if any_is_relative(&options.cloud_init)
-                || any_is_relative(&options.ignition)
-                || any_is_relative(&options.vfio_pci)
-                || any_is_relative(&options.vfio_pci_mdev)
-            {
+            if any_is_relative(&options.cloud_init) || any_is_relative(&options.ignition) {
                 bail!(
                     concat!(
-                        "paths specified using --cloud-init, --ignition, --vfio-pci, or",
-                        " --vfio-pci-mdev must be absolute when using crun-qemu with {}",
+                        "paths specified using --cloud-init or --ignition must be absolute when",
+                        " using crun-qemu with {}",
                     ),
                     env.name().unwrap()
                 );
@@ -204,27 +194,6 @@ impl CustomOptions {
             path_in_container_into_path_in_host(spec, options.cloud_init.as_mut())?;
             path_in_container_into_path_in_host(spec, options.ignition.as_mut())?;
         }
-
-        let vfio_pci = options
-            .vfio_pci
-            .iter()
-            .map(VfioPciAddress::from_sys_path)
-            .collect::<Result<_>>()?;
-
-        let vfio_pci_mdev = options
-            .vfio_pci_mdev
-            .iter()
-            .map(VfioPciMdevUuid::from_sys_path)
-            .collect::<Result<_>>()?;
-
-        let options = CustomOptions {
-            persist_changes: options.persist_changes,
-            cloud_init: options.cloud_init,
-            ignition: options.ignition,
-            vfio_pci,
-            vfio_pci_mdev,
-            passwords: options.password,
-        };
 
         Ok(options)
     }
