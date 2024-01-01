@@ -6,6 +6,8 @@ use std::env;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::thread;
+use std::time::Duration;
 
 use anyhow::{anyhow, Result};
 use test_case::test_matrix;
@@ -125,32 +127,36 @@ fn test_run(engine: Engine, case: TestCase) {
                 .wait()?;
 
             if status.success() {
-                // run the test script
-
-                let mut exec_child = engine
-                    .command("exec")
-                    .arg("-i")
-                    .arg(&container_name)
-                    .arg(&case.exec_user)
-                    .arg("bash")
-                    .arg("-s")
-                    .stdin(Stdio::piped())
-                    .spawn()?;
-
-                {
-                    let mut writer = BufWriter::new(exec_child.stdin.take().unwrap());
-                    writer.write_all("set -e\n".as_bytes())?;
-                    writer.write_all(case.test_script.as_bytes())?;
-                    writer.write_all("\n".as_bytes())?;
-                    writer.flush()?;
-                    // stdin is closed when writer is dropped
-                }
-
-                break match exec_child.wait()?.code().unwrap() {
-                    0 => Ok(()),
-                    n => Err(anyhow!("test script failed with exit code {n}")),
-                };
+                break;
             }
+        }
+
+        thread::sleep(Duration::from_secs(3)); // work around some flakiness
+
+        // run the test script
+
+        let mut exec_child = engine
+            .command("exec")
+            .arg("-i")
+            .arg(&container_name)
+            .arg(&case.exec_user)
+            .arg("bash")
+            .arg("-s")
+            .stdin(Stdio::piped())
+            .spawn()?;
+
+        {
+            let mut writer = BufWriter::new(exec_child.stdin.take().unwrap());
+            writer.write_all("set -e\n".as_bytes())?;
+            writer.write_all(case.test_script.as_bytes())?;
+            writer.write_all("\n".as_bytes())?;
+            writer.flush()?;
+            // stdin is closed when writer is dropped
+        }
+
+        match exec_child.wait()?.code().unwrap() {
+            0 => Ok(()),
+            n => Err(anyhow!("test script failed with exit code {n}")),
         }
     })();
 
