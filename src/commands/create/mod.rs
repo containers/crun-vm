@@ -10,7 +10,7 @@ use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{bail, ensure, Result};
+use anyhow::{bail, ensure, Context, Result};
 use nix::sys::stat::{major, makedev, minor, mknod, Mode, SFlag};
 
 use crate::commands::create::custom_opts::CustomOptions;
@@ -424,15 +424,20 @@ fn set_up_first_boot_config(
         mounts,
     };
 
-    config.apply_to_cloud_init_config(
-        custom_options.cloud_init.as_ref(),
-        spec.root_path().join("crun-qemu/cloud-init"),
-    )?;
+    config
+        .apply_to_cloud_init_config(
+            custom_options.cloud_init.as_ref(),
+            spec.root_path().join("crun-qemu/first-boot/cloud-init"),
+            spec.root_path().join("crun-qemu/first-boot/cloud-init.iso"),
+        )
+        .context("failed to load cloud-init config")?;
 
-    config.apply_to_ignition_config(
-        custom_options.ignition.as_ref(),
-        spec.root_path().join("crun-qemu/ignition.ign"),
-    )?;
+    config
+        .apply_to_ignition_config(
+            custom_options.ignition.as_ref(),
+            spec.root_path().join("crun-qemu/first-boot/ignition.ign"),
+        )
+        .context("failed to load ignition config")?;
 
     Ok(())
 }

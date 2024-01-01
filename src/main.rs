@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use std::env;
+use std::process;
 
-use anyhow::Result;
-
-fn main() -> Result<()> {
-    crun_qemu::main(env::args_os().skip(1))
+fn main() {
+    if let Err(e) = crun_qemu::main(env::args_os().skip(1)) {
+        eprintln!("{:#}", e);
+        process::exit(1);
+    }
 }

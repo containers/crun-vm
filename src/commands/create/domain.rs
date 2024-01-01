@@ -50,7 +50,7 @@ pub fn set_up_libvirt_domain_xml(
                 "entry",
                 &[
                     ("name", "opt/com.coreos/config"),
-                    ("file", "/crun-qemu/ignition.ign"),
+                    ("file", "/crun-qemu/first-boot/ignition.ign"),
                 ],
             )
         })?;
@@ -114,7 +114,7 @@ pub fn set_up_libvirt_domain_xml(
                 se(
                     w,
                     "source",
-                    &[("file", "/crun-qemu/cloud-init/cloud-init.iso")],
+                    &[("file", "/crun-qemu/first-boot/cloud-init.iso")],
                 )?;
                 se(w, "target", &[("dev", &next_dev_name()), ("bus", "virtio")])?;
                 Ok(())

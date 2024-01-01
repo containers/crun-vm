@@ -13,13 +13,8 @@ use crate::util::PathExt;
 ///
 /// TODO: It may be better to use libcrun directly, although its public API purportedly isn't in
 /// great shape: https://github.com/containers/crun/issues/1018
-pub fn crun<I, S>(args: I) -> Result<()>
-where
-    I: IntoIterator<Item = S>,
-    S: AsRef<OsStr>,
-{
+pub fn crun(args: impl IntoIterator<Item = impl AsRef<OsStr>>) -> Result<()> {
     let status = Command::new("crun").args(args).spawn()?.wait()?;
-
     ensure!(status.success(), "crun failed");
 
     Ok(())

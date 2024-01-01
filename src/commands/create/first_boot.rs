@@ -5,7 +5,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{anyhow, bail, ensure, Result};
+use anyhow::{bail, ensure, Context, Result};
 
 use crate::commands::create::Mounts;
 use crate::util::PathExt;
@@ -23,6 +23,7 @@ impl FirstBootConfig<'_> {
         &self,
         in_config_dir_path: Option<impl AsRef<Path>>,
         out_config_dir_path: impl AsRef<Path>,
+        out_config_iso_file_path: impl AsRef<Path>,
     ) -> Result<()> {
         fs::create_dir_all(&out_config_dir_path)?;
 
@@ -32,9 +33,11 @@ impl FirstBootConfig<'_> {
 
         if let Some(in_config_dir_path) = &in_config_dir_path {
             for file in ["meta-data", "user-data"] {
+                let path = in_config_dir_path.as_ref().join(file);
                 ensure!(
-                    in_config_dir_path.as_ref().join(file).is_file(),
-                    "cloud-init: missing {file} file"
+                    path.is_file(),
+                    "missing mandatory config file {}",
+                    path.as_str()
                 );
             }
 
@@ -54,12 +57,11 @@ impl FirstBootConfig<'_> {
             if let Some(line) = user_data_str.lines().next() {
                 ensure!(
                     line.trim() == "#cloud-config",
-                    "cloud-init: expected shebang '#cloud-config' in user-data file"
+                    "expected shebang '#cloud-config' in user-data file"
                 );
             }
 
-            user_data = serde_yaml::from_str(&user_data_str)
-                .map_err(|e| anyhow!("cloud-init: invalid user-data file: {e}"))?;
+            user_data = serde_yaml::from_str(&user_data_str).context("invalid user-data file")?;
         } else {
             user_data = serde_yaml::Value::Null;
         }
@@ -72,7 +74,7 @@ impl FirstBootConfig<'_> {
 
         let user_data_mapping = match &mut user_data {
             serde_yaml::Value::Mapping(m) => m,
-            _ => bail!("cloud-init: invalid user-data file"),
+            _ => bail!("invalid user-data file"),
         };
 
         // set user passwords
@@ -85,7 +87,7 @@ impl FirstBootConfig<'_> {
                 .or_insert_with(|| serde_yaml::Value::Mapping(serde_yaml::Mapping::new()))
             {
                 serde_yaml::Value::Mapping(m) => m,
-                _ => bail!("cloud-init: invalid user-data file"),
+                _ => bail!("invalid user-data file"),
             };
 
             chpasswd.insert("expire".into(), false.into());
@@ -99,7 +101,7 @@ impl FirstBootConfig<'_> {
                 .or_insert_with(|| serde_yaml::Value::Sequence(vec![]))
             {
                 serde_yaml::Value::Sequence(mounts) => mounts,
-                _ => bail!("cloud-init: invalid user-data file"),
+                _ => bail!("invalid user-data file"),
             };
 
             let mut add_mount = |typ: &str, tag: &str, path_in_guest: &Path| {
@@ -131,7 +133,7 @@ impl FirstBootConfig<'_> {
             .or_insert_with(|| serde_yaml::Value::Sequence(vec![]))
         {
             serde_yaml::Value::Sequence(keys) => keys,
-            _ => bail!("cloud-init: invalid user-data file"),
+            _ => bail!("invalid user-data file"),
         };
 
         ssh_authorized_keys.push(self.container_public_key.into());
@@ -147,7 +149,7 @@ impl FirstBootConfig<'_> {
                 .or_insert_with(|| serde_yaml::Value::Sequence(vec![]))
             {
                 serde_yaml::Value::Sequence(v) => v,
-                _ => bail!("cloud-init: invalid user-data file"),
+                _ => bail!("invalid user-data file"),
             };
 
             for (path, target) in block_device_symlinks {
@@ -176,7 +178,7 @@ impl FirstBootConfig<'_> {
                 .or_insert_with(|| serde_yaml::Value::Sequence(vec![]))
             {
                 serde_yaml::Value::Sequence(v) => v,
-                _ => bail!("cloud-init: invalid user-data file"),
+                _ => bail!("invalid user-data file"),
             };
 
             let mut mapping = serde_yaml::Mapping::new();
@@ -203,7 +205,7 @@ impl FirstBootConfig<'_> {
 
         let status = Command::new("genisoimage")
             .arg("-output")
-            .arg(out_config_dir_path.as_ref().join("cloud-init.iso"))
+            .arg(out_config_iso_file_path.as_ref())
             .arg("-volid")
             .arg("cidata")
             .arg("-joliet")
@@ -229,8 +231,7 @@ impl FirstBootConfig<'_> {
 
         let mut user_data: serde_json::Value = if let Some(user_path) = &in_config_file_path {
             fs::copy(user_path, &out_config_file_path)?;
-            serde_json::from_reader(File::open(user_path)?)
-                .map_err(|e| anyhow!("ignition: invalid config file: {e}"))?
+            serde_json::from_reader(File::open(user_path)?).context("invalid config file")?
         } else {
             fs::write(
                 &out_config_file_path,
@@ -245,7 +246,7 @@ impl FirstBootConfig<'_> {
 
         let user_data_mapping = match &mut user_data {
             serde_json::Value::Object(m) => m,
-            _ => bail!("ignition: invalid config file"),
+            _ => bail!("invalid config file"),
         };
 
         // adjust authorized keys
@@ -255,7 +256,7 @@ impl FirstBootConfig<'_> {
             .or_insert_with(|| serde_json::json!({}))
         {
             serde_json::Value::Object(map) => map,
-            _ => bail!("ignition: invalid config file"),
+            _ => bail!("invalid config file"),
         };
 
         let users = match passwd
@@ -263,7 +264,7 @@ impl FirstBootConfig<'_> {
             .or_insert_with(|| serde_json::json!([]))
         {
             serde_json::Value::Array(users) => users,
-            _ => bail!("ignition: invalid config file"),
+            _ => bail!("invalid config file"),
         };
 
         let users_contains_core = users.iter().any(|u| match u {
@@ -280,7 +281,7 @@ impl FirstBootConfig<'_> {
         for user in users {
             let map = match user {
                 serde_json::Value::Object(m) => m,
-                _ => bail!("ignition: invalid config file"),
+                _ => bail!("invalid config file"),
             };
 
             if map.get("name") == Some(&"core".into()) {
@@ -289,7 +290,7 @@ impl FirstBootConfig<'_> {
                     .or_insert_with(|| serde_json::json!([]))
                 {
                     serde_json::Value::Array(keys) => keys,
-                    _ => bail!("ignition: invalid config file"),
+                    _ => bail!("invalid config file"),
                 };
 
                 keys.push(self.container_public_key.into());
@@ -305,7 +306,7 @@ impl FirstBootConfig<'_> {
             .or_insert_with(|| serde_json::json!({}))
         {
             serde_json::Value::Object(map) => map,
-            _ => bail!("ignition: invalid config file"),
+            _ => bail!("invalid config file"),
         };
 
         let files = match storage
@@ -313,7 +314,7 @@ impl FirstBootConfig<'_> {
             .or_insert_with(|| serde_json::json!([]))
         {
             serde_json::Value::Array(files) => files,
-            _ => bail!("ignition: invalid config file"),
+            _ => bail!("invalid config file"),
         };
 
         if let Some(hostname) = self.hostname {
@@ -352,11 +353,10 @@ impl FirstBootConfig<'_> {
             .or_insert_with(|| serde_json::json!([]))
         {
             serde_json::Value::Array(links) => links,
-            _ => bail!("ignition: invalid config file"),
+            _ => bail!("invalid config file"),
         };
 
-        let block_device_symlinks = self.get_block_device_symlinks();
-        for (path, target) in block_device_symlinks {
+        for (path, target) in self.get_block_device_symlinks() {
             links.push(serde_json::json!({
                 "path": path.as_str(),
                 "overwrite": true,
@@ -372,7 +372,7 @@ impl FirstBootConfig<'_> {
             .or_insert_with(|| serde_json::json!({}))
         {
             serde_json::Value::Object(map) => map,
-            _ => bail!("ignition: invalid config file"),
+            _ => bail!("invalid config file"),
         };
 
         let units = match systemd
@@ -380,7 +380,7 @@ impl FirstBootConfig<'_> {
             .or_insert_with(|| serde_json::json!([]))
         {
             serde_json::Value::Array(units) => units,
-            _ => bail!("ignition: invalid config file"),
+            _ => bail!("invalid config file"),
         };
 
         let mut add_mount = |typ: &str, tag: &str, path_in_guest: &Path| {

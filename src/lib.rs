@@ -31,11 +31,7 @@ enum Command {
     Common(Box<liboci_cli::CommonCmd>),
 }
 
-pub fn main<I, S>(args: I) -> Result<()>
-where
-    I: IntoIterator<Item = S>,
-    S: AsRef<OsStr>,
-{
+pub fn main(args: impl IntoIterator<Item = impl AsRef<OsStr>>) -> Result<()> {
     let args = args
         .into_iter()
         .map(|a| a.as_ref().to_os_string())
@@ -58,6 +54,5 @@ where
     }
 
     // not a command we implement ourselves, just pass it on to crun
-    crun(&args)?;
-    Ok(())
+    crun(&args)
 }
