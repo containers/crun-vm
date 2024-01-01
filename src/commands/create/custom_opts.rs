@@ -2,9 +2,8 @@
 
 use std::iter;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 
-use anyhow::{anyhow, bail, ensure, Result};
+use anyhow::{anyhow, ensure, Result};
 use clap::Parser;
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -20,10 +19,8 @@ pub struct VfioPciAddress {
     pub function: u8,
 }
 
-impl FromStr for VfioPciAddress {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self> {
+impl VfioPciAddress {
+    fn from_path(path: impl AsRef<Path>) -> Result<Self> {
         lazy_static! {
             static ref PATTERN: Regex = {
                 let h = r"[0-9a-fA-F]".to_string();
@@ -38,7 +35,7 @@ impl FromStr for VfioPciAddress {
             };
         }
 
-        let path = Path::new(s).canonicalize()?;
+        let path = path.as_ref().canonicalize()?;
 
         let capture = PATTERN
             .captures(path.as_str())
@@ -58,10 +55,8 @@ impl FromStr for VfioPciAddress {
 #[derive(Clone, Debug)]
 pub struct VfioPciMdevUuid(pub String);
 
-impl FromStr for VfioPciMdevUuid {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self> {
+impl VfioPciMdevUuid {
+    fn from_path(path: impl AsRef<Path>) -> Result<Self> {
         lazy_static! {
             static ref PATTERN: Regex = {
                 let h = r"[0-9a-zA-Z]".to_string();
@@ -75,7 +70,7 @@ impl FromStr for VfioPciMdevUuid {
             };
         }
 
-        let path = Path::new(s).canonicalize()?;
+        let path = path.as_ref().canonicalize()?;
 
         let capture = PATTERN
             .captures(path.as_str())
@@ -85,25 +80,58 @@ impl FromStr for VfioPciMdevUuid {
     }
 }
 
-#[derive(clap::Parser, Debug)]
+#[derive(Debug)]
 pub struct CustomOptions {
-    #[clap(long)]
     pub persist_changes: bool,
-
-    #[clap(long)]
     pub cloud_init: Option<PathBuf>,
-
-    #[clap(long)]
     pub ignition: Option<PathBuf>,
-
-    #[clap(long)]
     pub vfio_pci: Vec<VfioPciAddress>,
-
-    #[clap(long)]
     pub vfio_pci_mdev: Vec<VfioPciMdevUuid>,
+    pub password: Option<String>,
+}
+
+impl TryFrom<CustomOptionsRaw> for CustomOptions {
+    type Error = anyhow::Error;
+
+    fn try_from(opts: CustomOptionsRaw) -> Result<Self> {
+        Ok(Self {
+            persist_changes: opts.persist_changes,
+            cloud_init: opts.cloud_init,
+            ignition: opts.ignition,
+            vfio_pci: opts
+                .vfio_pci
+                .iter()
+                .map(VfioPciAddress::from_path)
+                .collect::<Result<_>>()?,
+            vfio_pci_mdev: opts
+                .vfio_pci_mdev
+                .iter()
+                .map(VfioPciMdevUuid::from_path)
+                .collect::<Result<_>>()?,
+            password: opts.password,
+        })
+    }
+}
+
+#[derive(clap::Parser, Debug)]
+struct CustomOptionsRaw {
+    #[clap(long)]
+    persist_changes: bool,
 
     #[clap(long)]
-    pub password: Option<String>,
+    cloud_init: Option<PathBuf>,
+
+    #[clap(long)]
+    ignition: Option<PathBuf>,
+
+    #[clap(long)]
+    vfio_pci: Vec<PathBuf>,
+
+    #[clap(long)]
+    vfio_pci_mdev: Vec<PathBuf>,
+
+    #[clap(long)]
+    password: Option<String>,
 }
 
 impl CustomOptions {
@@ -120,56 +148,83 @@ impl CustomOptions {
         // TODO: We currently assume that no entrypoint is given (either by being set by in the
         // container image or through --entrypoint). Must somehow find whether the first arg is the
         // entrypoint and ignore it in that case.
-        let mut options = CustomOptions::parse_from(
+        let mut options = CustomOptionsRaw::parse_from(
             iter::once(&"podman run [<podman-opts>] <image>".to_string()).chain(args),
         );
 
-        if env.needs_absolute_custom_opt_paths() {
-            fn any_is_relative(iter: impl IntoIterator<Item = impl AsRef<Path>>) -> bool {
-                iter.into_iter().any(|p| p.as_ref().is_relative())
-            }
+        fn all_are_absolute(iter: impl IntoIterator<Item = impl AsRef<Path>>) -> bool {
+            iter.into_iter().all(|p| p.as_ref().is_absolute())
+        }
 
-            if any_is_relative(&options.cloud_init) || any_is_relative(&options.ignition) {
-                bail!(
+        fn path_in_container_into_path_in_host(
+            spec: &oci_spec::runtime::Spec,
+            path: impl AsRef<Path>,
+        ) -> Result<PathBuf> {
+            let mount = spec
+                .mounts()
+                .iter()
+                .flatten()
+                .filter(|m| m.source().is_some())
+                .filter(|m| path.as_ref().starts_with(m.destination()))
+                .last()
+                .ok_or_else(|| anyhow!("can't find {}", path.as_str()))?;
+
+            let relative_path = path.as_ref().strip_prefix(mount.destination()).unwrap();
+            let path_in_host = mount.source().as_ref().unwrap().join(relative_path);
+
+            ensure!(path_in_host.try_exists()?, "can't find {}", path.as_str());
+
+            Ok(path_in_host)
+        }
+
+        match env {
+            RuntimeEnv::Docker => {
+                // Docker doesn't run the runtime with the same working directory as the process
+                // that launched `docker-run`, so we require custom option paths to be absolute.
+                //
+                // TODO: There must be a better way...
+                ensure!(
+                    all_are_absolute(&options.cloud_init)
+                        && all_are_absolute(&options.ignition)
+                        && all_are_absolute(&options.vfio_pci)
+                        && all_are_absolute(&options.vfio_pci_mdev),
                     concat!(
-                        "paths specified using --cloud-init or --ignition must be absolute when",
-                        " using crun-qemu with {}",
+                        "paths specified using --cloud-init, --ignition, --vfio-pci, or",
+                        " --vfio-pci-mdev must be absolute when using crun-qemu as a Docker",
+                        " runtime",
                     ),
-                    env.name().unwrap()
                 );
             }
-        }
+            RuntimeEnv::Kubernetes => {
+                // Custom option paths in Kubernetes refer to paths in the container/VM, and there
+                // isn't a reasonable notion of what the current directory is.
+                ensure!(
+                    all_are_absolute(&options.cloud_init) && all_are_absolute(&options.ignition),
+                    concat!(
+                        "paths specified using --cloud-init or --ignition must be absolute when",
+                        " using crun-qemu as a Kubernetes runtime",
+                    ),
+                );
 
-        if env == RuntimeEnv::Kubernetes {
-            fn path_in_container_into_path_in_host(
-                spec: &oci_spec::runtime::Spec,
-                path: Option<&mut PathBuf>,
-            ) -> Result<()> {
-                if let Some(path) = path {
-                    let mount = spec
-                        .mounts()
-                        .iter()
-                        .flatten()
-                        .filter(|m| m.source().is_some())
-                        .filter(|m| path.starts_with(m.destination()))
-                        .last()
-                        .ok_or_else(|| anyhow!("can't find {}", path.as_str()))?;
+                ensure!(
+                    options.vfio_pci.is_empty() && options.vfio_pci_mdev.is_empty(),
+                    concat!(
+                        "options --vfio-pci and --vfio-pci-mdev are not allowed when using",
+                        " crun-qemu as a Kubernetes runtime",
+                    )
+                );
 
-                    let relative_path = path.strip_prefix(mount.destination()).unwrap();
-                    let path_in_host = mount.source().as_ref().unwrap().join(relative_path);
-
-                    ensure!(path_in_host.try_exists()?, "can't find {}", path.as_str());
-
-                    *path = path_in_host;
+                if let Some(path) = &mut options.cloud_init {
+                    *path = path_in_container_into_path_in_host(spec, &path)?;
                 }
 
-                Ok(())
+                if let Some(path) = &mut options.ignition {
+                    *path = path_in_container_into_path_in_host(spec, &path)?;
+                }
             }
-
-            path_in_container_into_path_in_host(spec, options.cloud_init.as_mut())?;
-            path_in_container_into_path_in_host(spec, options.ignition.as_mut())?;
+            RuntimeEnv::Other => {}
         }
 
-        Ok(options)
+        options.try_into()
     }
 }

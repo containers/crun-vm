@@ -48,30 +48,4 @@ impl RuntimeEnv {
             Ok(RuntimeEnv::Other)
         }
     }
-
-    pub fn name(self) -> Option<&'static str> {
-        match self {
-            RuntimeEnv::Docker => Some("Docker"),
-            RuntimeEnv::Kubernetes => Some("Kubernetes"),
-            RuntimeEnv::Other => None,
-        }
-    }
-
-    pub fn needs_absolute_custom_opt_paths(self) -> bool {
-        match self {
-            RuntimeEnv::Docker => {
-                // Docker doesn't run the runtime with the same working directory as the process
-                // that launched `docker-run`, so we require custom option paths to be absolute.
-                //
-                // TODO: There must be a better way...
-                true
-            }
-            RuntimeEnv::Kubernetes => {
-                // Custom option paths in Kubernetes refer to paths in the container/VM, and there
-                // isn't a reasonable notion of what the current directory is.
-                true
-            }
-            RuntimeEnv::Other => false,
-        }
-    }
 }
