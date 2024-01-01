@@ -61,19 +61,19 @@ $ podman stop --latest
 
 Changes made by the VM to its image are by default not persisted in the original
 image file. This can be changed by passing in the non-standard option
-`--persist-changes` *after* the `--rootfs` option:
+`--persistent` *after* the `--rootfs` option:
 
 ```console
 $ podman run \
     --runtime crun-qemu \
     -it --rm \
     --rootfs my-vm-image \
-    --persist-changes
+    --persistent
 ```
 
-> :warning: When using `--persist-changes`, make sure that the image file is
-> never simultaneously used by another process or VM, otherwise **data
-> corruption may occur**.
+> :warning: When using `--persistent`, make sure that the image file is never
+> simultaneously used by another process or VM, otherwise **data corruption may
+> occur**.
 
 ### From VM image files packaged into container images
 
@@ -94,7 +94,7 @@ You can also use `util/package-vm-image.sh` to easily package a VM image into a
 container image, and `util/extract-vm-image.sh` to extract a VM image contained
 in a container image.
 
-Note that flag `--persist-changes` has no effect when running VMs from container
+Note that flag `--persistent` has no effect when running VMs from container
 images.
 
 ## First-boot customization

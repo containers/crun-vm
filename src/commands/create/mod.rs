@@ -119,7 +119,7 @@ fn set_up_vm_image(
     let mirror_vm_image_path_in_host = spec.root_path().join(&mirror_vm_image_path_in_container);
     let mirror_vm_image_path_in_container = Path::new("/").join(mirror_vm_image_path_in_container);
 
-    let private_dir = if custom_options.persist_changes {
+    let private_dir = if custom_options.persistent {
         let vm_image_dir_path = vm_image_path_in_host.parent().unwrap();
         let vm_image_dir_name = vm_image_dir_path.file_name().unwrap();
 
@@ -144,13 +144,13 @@ fn set_up_vm_image(
         vm_image_path_in_host.parent().unwrap(),
         mirror_vm_image_path_in_host.parent().unwrap(),
         spec.mount_label(),
-        custom_options.persist_changes,
+        custom_options.persistent,
         private_dir,
     )?;
 
     let mut vm_image_info = VmImageInfo::of(&mirror_vm_image_path_in_host)?;
 
-    if custom_options.persist_changes {
+    if custom_options.persistent {
         // We want to propagate writes but not removal, so that the user's file isn't deleted by
         // Podman on cleanup, so we bind mount it on top of itself.
 

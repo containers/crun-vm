@@ -82,7 +82,7 @@ impl VfioPciMdevUuid {
 
 #[derive(Debug)]
 pub struct CustomOptions {
-    pub persist_changes: bool,
+    pub persistent: bool,
     pub cloud_init: Option<PathBuf>,
     pub ignition: Option<PathBuf>,
     pub vfio_pci: Vec<VfioPciAddress>,
@@ -95,7 +95,7 @@ impl TryFrom<CustomOptionsRaw> for CustomOptions {
 
     fn try_from(opts: CustomOptionsRaw) -> Result<Self> {
         Ok(Self {
-            persist_changes: opts.persist_changes,
+            persistent: opts.persistent,
             cloud_init: opts.cloud_init,
             ignition: opts.ignition,
             vfio_pci: opts
@@ -116,7 +116,7 @@ impl TryFrom<CustomOptionsRaw> for CustomOptions {
 #[derive(clap::Parser, Debug)]
 struct CustomOptionsRaw {
     #[clap(long)]
-    persist_changes: bool,
+    persistent: bool,
 
     #[clap(long)]
     cloud_init: Option<PathBuf>,
