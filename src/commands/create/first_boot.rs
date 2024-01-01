@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -28,45 +28,43 @@ impl FirstBootConfig<'_> {
 
         // create copy of config
 
-        for file in ["meta-data", "user-data", "vendor-data"] {
-            let path = out_config_dir_path.as_ref().join(file);
+        let mut user_data: serde_yaml::Value;
 
-            if let Some(user_config_path) = &in_config_dir_path {
-                let user_path = user_config_path.as_ref().join(file);
-                if user_path.exists() {
-                    // TODO: Potential security vulnerability, symlink may point to somewhere on
-                    // host that user isn't normally able to access, especially when running as a
-                    // Kubernetes runtime.
-                    ensure!(
-                        user_path.metadata()?.is_file(),
-                        "cloud-init: expected {file} to be a regular file"
-                    );
+        if let Some(in_config_dir_path) = &in_config_dir_path {
+            for file in ["meta-data", "user-data"] {
+                ensure!(
+                    in_config_dir_path.as_ref().join(file).is_file(),
+                    "cloud-init: missing {file} file"
+                );
+            }
 
-                    fs::copy(user_path, &path)?;
-                    continue;
+            for file in ["meta-data", "user-data", "vendor-data"] {
+                if in_config_dir_path.as_ref().join(file).try_exists()? {
+                    // TODO: Security vulnerability, symlink may point somewhere on host that user
+                    // shouldn't be able to access, especially when running as a Kubernetes runtime.
+                    fs::copy(
+                        in_config_dir_path.as_ref().join(file),
+                        out_config_dir_path.as_ref().join(file),
+                    )?;
                 }
             }
 
-            let mut f = File::create(path)?;
-            if file == "user-data" {
-                f.write_all(b"#cloud-config\n")?;
+            let user_data_str = fs::read_to_string(in_config_dir_path.as_ref().join("user-data"))?;
+
+            if let Some(line) = user_data_str.lines().next() {
+                ensure!(
+                    line.trim() == "#cloud-config",
+                    "cloud-init: expected shebang '#cloud-config' in user-data file"
+                );
             }
+
+            user_data = serde_yaml::from_str(&user_data_str)
+                .map_err(|e| anyhow!("cloud-init: invalid user-data file: {e}"))?;
+        } else {
+            user_data = serde_yaml::Value::Null;
         }
 
         // adjust user-data config
-
-        let user_data_path = out_config_dir_path.as_ref().join("user-data");
-        let user_data = fs::read_to_string(&user_data_path)?;
-
-        if let Some(line) = user_data.lines().next() {
-            ensure!(
-                line.trim() == "#cloud-config",
-                "cloud-init: expected shebang '#cloud-config' in user-data file"
-            );
-        }
-
-        let mut user_data: serde_yaml::Value = serde_yaml::from_str(&user_data)
-            .map_err(|e| anyhow!("cloud-init: invalid user-data file: {e}"))?;
 
         if let serde_yaml::Value::Null = &user_data {
             user_data = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
@@ -191,9 +189,16 @@ impl FirstBootConfig<'_> {
         // generate iso
 
         {
-            let mut f = File::create(user_data_path)?;
+            let mut f = File::create(out_config_dir_path.as_ref().join("user-data"))?;
             f.write_all(b"#cloud-config\n")?;
             serde_yaml::to_writer(&mut f, &user_data)?;
+        }
+
+        for file in ["meta-data", "vendor-data"] {
+            OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(out_config_dir_path.as_ref().join(file))?;
         }
 
         let status = Command::new("genisoimage")

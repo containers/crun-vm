@@ -118,6 +118,7 @@ kind: ConfigMap
 metadata:
   name: my-cloud-init-config
 data:
+  meta-data: ""
   user-data: |
     #cloud-config
     runcmd:
