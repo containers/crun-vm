@@ -8,16 +8,16 @@ virtualization technologies like libvirt or KubeVirt.
 
 ### Major features
 
-  - Works as a runtime for **Podman**, **Docker**, and **Kubernetes**.
-  - Launching VMs from VM **image files** present on the host or packaged into
+  - Use it with **Podman**, **Docker**, or **Kubernetes**.
+  - Launch VMs from VM **image files** present on the host or packaged into
     **container images**.
-  - Controlling VM CPU and memory allocation.
-  - Providing **cloud-init** and **Ignition** configurations to VMs.
-  - **Mounting directories** into VMs.
-  - Passing **block devices** through to VMs.
-  - Passing **vfio-pci** and **mediated vfio-pci** devices through to VMs.
-  - **Forwarding ports** from the host to VMs.
-  - **`podman exec`**/**`docker exec`**/**`kubectl exec`'ing** into VMs.
+  - Control VM CPU and memory allocation.
+  - Provide **cloud-init** and **Ignition** configurations to VMs.
+  - **Mount directories** into VMs.
+  - Pass **block devices** through to VMs.
+  - Pass **vfio-pci** and **mediated vfio-pci** devices through to VMs.
+  - **Forward ports** from the host to VMs.
+  - **`podman exec`**/**`docker exec`**/**`kubectl exec`** into VMs.
 
 ### Documentation
 
