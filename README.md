@@ -6,6 +6,10 @@ running VMs (in simple configurations) as easy as running containers, using
 standard container tooling and without the need for in-depth knowledge on
 virtualization technologies like libvirt or KubeVirt.
 
+<p align="center">
+  <img src="docs/example.gif" width="680" />
+</p>
+
 ### Major features
 
   - Use it with **Podman**, **Docker**, or **Kubernetes**.
