@@ -71,7 +71,9 @@ $ podman run \
     --persistent
 ```
 
-> :warning: When using `--persistent`, make sure that the image file is never
+> [!WARNING]
+>
+> When using `--persistent`, make sure that the image file is never
 > simultaneously used by another process or VM, otherwise **data corruption may
 > occur**.
 
@@ -225,11 +227,13 @@ $ curl localhost:8000
 
 Bind mounting directories into the VM is supported:
 
-> :warning: This example recursively modifies the SELinux context of all files
-> under the path being mounted, in this case `./util`, which in the worst case
-> **may cause you to lose access to your files**. This is due to the `:z` volume
-> mount modifier, which instructs Podman to relabel the volume so that the VM
-> can access it.
+> [!WARNING]
+>
+> This example recursively modifies the SELinux context of all files under the
+> path being mounted, in this case `./util`, which in the worst case **may cause
+> you to lose access to your files**. This is due to the `:z` volume mount
+> modifier, which instructs Podman to relabel the volume so that the VM can
+> access it.
 >
 > Alternatively, you may remove this modifier from the command below and add
 > `--security-opt label=disable` instead to disable SELinux enforcement.
@@ -260,8 +264,9 @@ $ mount -t virtiofs virtiofs-<index> /home/fedora/util
 Similarly to directories, you can bind mount regular files into the VM, where
 they appear as block devices:
 
-> :warning: The warning about SELinux relabeling on the command above also
-> applies here.
+> [!WARNING]
+>
+> The warning about SELinux relabeling on the command above also applies here.
 
 ```console
 $ podman run \
