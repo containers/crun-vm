@@ -296,9 +296,6 @@ $ podman run \
     --cloud-init examples/cloud-init/config
 ```
 
-You can also pass them in as bind mounts using the `-v`/`--volume` or `--mount`
-flags.
-
 ### vfio-pci devices
 
 vfio-pci devices can be passed through to the VM by specifying the non-standard
