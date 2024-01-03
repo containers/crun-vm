@@ -43,7 +43,7 @@ pub fn create(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Create) -
     set_up_extra_container_mounts_and_devices(&mut spec)?;
     set_up_security(&mut spec);
 
-    set_up_first_boot_config(&spec, &mounts, &custom_options)?;
+    set_up_first_boot_config(&spec, &mounts, &custom_options, runtime_env)?;
     set_up_libvirt_domain_xml(&spec, &base_vm_image_info, &mounts, &custom_options)?;
 
     adjust_container_resources(&mut spec);
@@ -416,8 +416,9 @@ fn set_up_first_boot_config(
     spec: &oci_spec::runtime::Spec,
     mounts: &Mounts,
     custom_options: &CustomOptions,
+    env: RuntimeEnv,
 ) -> Result<()> {
-    let container_public_key = generate_container_ssh_key_pair(spec)?;
+    let container_public_key = get_container_ssh_key_pair(spec, env)?;
 
     let config = FirstBootConfig {
         hostname: spec.hostname().as_deref(),
@@ -444,24 +445,47 @@ fn set_up_first_boot_config(
     Ok(())
 }
 
-/// Returns the public key.
-fn generate_container_ssh_key_pair(spec: &oci_spec::runtime::Spec) -> Result<String> {
-    fs::create_dir_all(spec.root_path().join("root/.ssh"))?;
+/// Returns the public key for the container.
+///
+/// This first attempts to use the current user's key pair, in case the VM does not support
+/// cloud-init but the user injected their public key into it themselves.
+fn get_container_ssh_key_pair(spec: &oci_spec::runtime::Spec, env: RuntimeEnv) -> Result<String> {
+    let ssh_path = spec.root_path().join("root/.ssh");
+    fs::create_dir_all(&ssh_path)?;
 
-    let status = Command::new("ssh-keygen")
-        .arg("-q")
-        .arg("-f")
-        .arg(spec.root_path().join("root/.ssh/id_rsa"))
-        .arg("-N")
-        .arg("")
-        .spawn()?
-        .wait()?;
+    let try_copy_user_key_pair = || -> Result<bool> {
+        if env != RuntimeEnv::Other {
+            // definitely not Podman, we're probably not running as the user that invoked the engine
+            return Ok(false);
+        }
 
-    ensure!(status.success(), "ssh-keygen failed");
+        if let Some(user_home_path) = home::home_dir() {
+            let user_ssh = user_home_path.join(".ssh");
 
-    let public_key = fs::read_to_string(spec.root_path().join("root/.ssh/id_rsa.pub"))?;
+            if user_ssh.join("id_rsa.pub").is_file() && user_ssh.join("id_rsa").is_file() {
+                fs::copy(user_ssh.join("id_rsa.pub"), ssh_path.join("id_rsa.pub"))?;
+                fs::copy(user_ssh.join("id_rsa"), ssh_path.join("id_rsa"))?;
+                return Ok(true);
+            }
+        }
 
-    Ok(public_key)
+        Ok(false)
+    };
+
+    if !try_copy_user_key_pair()? {
+        let status = Command::new("ssh-keygen")
+            .arg("-q")
+            .arg("-f")
+            .arg(ssh_path.join("id_rsa"))
+            .arg("-N")
+            .arg("")
+            .spawn()?
+            .wait()?;
+
+        ensure!(status.success(), "ssh-keygen failed");
+    }
+
+    Ok(fs::read_to_string(ssh_path.join("id_rsa.pub"))?)
 }
 
 fn adjust_container_resources(spec: &mut oci_spec::runtime::Spec) {
