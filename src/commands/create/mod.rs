@@ -43,11 +43,13 @@ pub fn create(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Create) -
     set_up_extra_container_mounts_and_devices(&mut spec)?;
     set_up_security(&mut spec);
 
-    spec.save(&config_path)?;
-    spec.save(spec.root_path().join("crun-qemu/config.json"))?; // to aid debugging
-
     set_up_first_boot_config(&spec, &mounts, &custom_options)?;
     set_up_libvirt_domain_xml(&spec, &base_vm_image_info, &mounts, &custom_options)?;
+
+    adjust_container_resources(&mut spec);
+
+    spec.save(&config_path)?;
+    spec.save(spec.root_path().join("crun-qemu/config.json"))?; // to aid debugging
 
     crun_create(global_args, args)?; // actually create container
 
@@ -460,4 +462,19 @@ fn generate_container_ssh_key_pair(spec: &oci_spec::runtime::Spec) -> Result<Str
     let public_key = fs::read_to_string(spec.root_path().join("root/.ssh/id_rsa.pub"))?;
 
     Ok(public_key)
+}
+
+fn adjust_container_resources(spec: &mut oci_spec::runtime::Spec) {
+    if let Some(linux) = spec.linux() {
+        if let Some(resources) = linux.resources() {
+            let mut linux = linux.clone();
+            let mut resources = resources.clone();
+
+            resources.set_cpu(None);
+            resources.set_memory(None);
+
+            linux.set_resources(Some(resources));
+            spec.set_linux(Some(linux));
+        }
+    }
 }
