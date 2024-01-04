@@ -134,9 +134,12 @@ pub fn set_up_libvirt_domain_xml(
 
                 s(w, "filesystem", &[("type", "mount")], |w| {
                     se(w, "driver", &[("type", "virtiofs")])?;
-                    s(w, "binary", &[("path", "/crun-qemu/virtiofsd")], |w| {
-                        se(w, "sandbox", &[("mode", "chroot")])
-                    })?;
+                    s(
+                        w,
+                        "binary",
+                        &[("path", "/crun-qemu/virtiofsd"), ("xattr", "on")],
+                        |w| se(w, "sandbox", &[("mode", "chroot")]),
+                    )?;
                     se(w, "source", &[("dir", path)])?;
                     se(w, "target", &[("dir", &tag)])?;
                     Ok(())
