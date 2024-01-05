@@ -32,7 +32,7 @@ pub fn create(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Create) -
     let runtime_env = RuntimeEnv::current(&spec, &original_root_path)?;
     let custom_options = CustomOptions::from_spec(&spec, runtime_env)?;
 
-    set_up_container_root(&mut spec, &args.bundle)?;
+    set_up_container_root(&mut spec, &args.bundle, &custom_options)?;
     let base_vm_image_info =
         set_up_vm_image(&spec, &args.bundle, &original_root_path, &custom_options)?;
 
@@ -56,7 +56,11 @@ pub fn create(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Create) -
     Ok(())
 }
 
-fn set_up_container_root(spec: &mut oci_spec::runtime::Spec, bundle_path: &Path) -> Result<()> {
+fn set_up_container_root(
+    spec: &mut oci_spec::runtime::Spec,
+    bundle_path: &Path,
+    custom_options: &CustomOptions,
+) -> Result<()> {
     // create root directory
 
     spec.set_root(Some(
@@ -86,11 +90,16 @@ fn set_up_container_root(spec: &mut oci_spec::runtime::Spec, bundle_path: &Path)
     fs::write(&entrypoint_path, ENTRYPOINT_BYTES)?;
     fs::set_permissions(&entrypoint_path, Permissions::from_mode(0o555))?;
 
+    let command = match custom_options.print_libvirt_xml {
+        true => vec!["cat", "/crun-qemu/domain.xml"],
+        false => vec!["/crun-qemu/entrypoint.sh"],
+    };
+
     spec.set_process({
         let mut process = spec.process().clone().unwrap();
         process.set_cwd(".".into());
         process.set_command_line(None);
-        process.set_args(Some(vec!["/crun-qemu/entrypoint.sh".to_string()]));
+        process.set_args(Some(command.into_iter().map(String::from).collect()));
         Some(process)
     });
 

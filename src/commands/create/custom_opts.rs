@@ -88,6 +88,7 @@ pub struct CustomOptions {
     pub vfio_pci: Vec<VfioPciAddress>,
     pub vfio_pci_mdev: Vec<VfioPciMdevUuid>,
     pub password: Option<String>,
+    pub print_libvirt_xml: bool,
 }
 
 impl TryFrom<CustomOptionsRaw> for CustomOptions {
@@ -109,6 +110,7 @@ impl TryFrom<CustomOptionsRaw> for CustomOptions {
                 .map(VfioPciMdevUuid::from_path)
                 .collect::<Result<_>>()?,
             password: opts.password,
+            print_libvirt_xml: opts.print_libvirt_xml,
         })
     }
 }
@@ -132,6 +134,9 @@ struct CustomOptionsRaw {
 
     #[clap(long)]
     password: Option<String>,
+
+    #[clap(long)]
+    print_libvirt_xml: bool,
 }
 
 impl CustomOptions {

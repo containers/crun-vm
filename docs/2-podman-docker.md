@@ -323,6 +323,17 @@ $ podman run \
     --vfio-pci-mdev /sys/bus/pci/devices/0000:00:02.0/5fa530b9-9fdf-4cde-8eb7-af73fcdeeaae
 ```
 
+## Advanced options
+
+### Inspecting the libvirt domain XML
+
+crun-qemu internally uses [libvirt] to launch a VM, generating a [domain XML
+definition] from the options provided to podman-run. This XML definition can be
+printed by adding the non-standard `--print-libvirt-xml` flag to your podman-run
+invocation.
+
 [cloud-init]: https://cloud-init.io/
+[domain XML definition]: https://libvirt.org/formatdomain.html
 [Ignition]: https://coreos.github.io/ignition/
 [KubeVirt `containerDisk`s]: https://kubevirt.io/user-guide/virtual_machines/disks_and_volumes/#containerdisk
+[libvirt]: https://libvirt.org/
