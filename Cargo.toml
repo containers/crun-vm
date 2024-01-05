@@ -24,6 +24,9 @@ default-features = false
 version = "0.3.0"
 default-features = false
 
+[dependencies.minidom]
+version = "0.15.0"
+
 [dependencies.nix]
 version = "0.27.0"
 default-features = false

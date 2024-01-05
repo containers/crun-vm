@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use std::fs::File;
-use std::io::Write;
+use std::io::{BufReader, Write};
+use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{ensure, Result};
 use xml::writer::XmlEvent;
 
 use crate::commands::create::custom_opts::{CustomOptions, VfioPciMdevUuid};
@@ -18,6 +19,19 @@ pub fn set_up_libvirt_domain_xml(
 ) -> Result<()> {
     let path = spec.root_path().join("crun-qemu/domain.xml");
 
+    generate(&path, spec, vm_image_info, mounts, custom_options)?;
+    merge_overlays(&path, &custom_options.merge_libvirt_xml)?;
+
+    Ok(())
+}
+
+fn generate(
+    path: impl AsRef<Path>,
+    spec: &oci_spec::runtime::Spec,
+    vm_image_info: &VmImageInfo,
+    mounts: &Mounts,
+    custom_options: &CustomOptions,
+) -> Result<()> {
     let mut w = xml::EmitterConfig::new()
         .perform_indent(true)
         .create_writer(File::create(path)?);
@@ -186,9 +200,87 @@ pub fn set_up_libvirt_domain_xml(
         Ok(())
     })?;
 
-    w.inner_mut().write_all(&[b'\n'])?;
+    w.inner_mut().flush()?;
 
     Ok(())
+}
+
+fn merge_overlays(base_path: impl AsRef<Path>, overlay_paths: &[impl AsRef<Path>]) -> Result<()> {
+    fn load(path: impl AsRef<Path>) -> Result<minidom::Element> {
+        let reader = BufReader::new(File::open(path)?);
+        Ok(minidom::Element::from_reader_with_prefixes(
+            reader,
+            "".to_string(),
+        )?)
+    }
+
+    fn save(path: impl AsRef<Path>, root: &minidom::Element) -> Result<()> {
+        let mut writer = File::create(path)?;
+        root.write_to_decl(&mut writer)?;
+        writer.write_all(b"\n")?;
+        writer.flush()?;
+        Ok(())
+    }
+
+    #[must_use]
+    fn merge(base: &minidom::Element, overlay: &minidom::Element) -> minidom::Element {
+        let mut builder = minidom::Element::builder(base.name(), base.ns());
+
+        for (name, val) in base.attrs().chain(overlay.attrs()) {
+            builder = builder.attr(name, val);
+        }
+
+        let overlay_has_text = !overlay.text().trim().is_empty();
+
+        for base_node in base.nodes() {
+            match base_node {
+                minidom::Node::Element(base_child) => {
+                    let new_child =
+                        match overlay.get_child(base_child.name(), base_child.ns().as_str()) {
+                            Some(overlay_child) => merge(base_child, overlay_child),
+                            None => base_child.clone(),
+                        };
+
+                    builder = builder.append(new_child);
+                }
+                minidom::Node::Text(base_text) => {
+                    if !overlay_has_text {
+                        builder = builder.append(base_text.as_str());
+                    }
+                }
+            };
+        }
+
+        for overlay_node in overlay.nodes() {
+            match overlay_node {
+                minidom::Node::Element(overlay_child) => {
+                    if !base.has_child(overlay_child.name(), overlay_child.ns().as_str()) {
+                        builder = builder.append(overlay_child.clone());
+                    }
+                }
+                minidom::Node::Text(overlay_text) => {
+                    if overlay_has_text {
+                        builder = builder.append(overlay_text.as_str());
+                    }
+                }
+            }
+        }
+
+        builder.build()
+    }
+
+    let mut base_root = load(&base_path)?;
+
+    for overlay_path in overlay_paths {
+        let overlay_root = load(overlay_path)?;
+        ensure!(
+            overlay_root.name() == "domain" && overlay_root.ns() == "",
+            "libvirt XML root node must be named 'domain' and have no namespace"
+        );
+        base_root = merge(&base_root, &overlay_root);
+    }
+
+    save(&base_path, &base_root)
 }
 
 // section

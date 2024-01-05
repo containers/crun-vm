@@ -325,12 +325,25 @@ $ podman run \
 
 ## Advanced options
 
-### Inspecting the libvirt domain XML
+### Inspecting and customizing the libvirt domain XML
 
 crun-qemu internally uses [libvirt] to launch a VM, generating a [domain XML
 definition] from the options provided to podman-run. This XML definition can be
 printed by adding the non-standard `--print-libvirt-xml` flag to your podman-run
 invocation.
+
+The generated XML definition can also be customized by specifying an XML file to
+be merged with it using the non-standard option `--merge-libvirt-xml <file>`.
+
+> [!NOTE]
+>
+> While `--merge-libvirt-xml` gives you maximum flexibility, it thwarts
+> crun-qemu's premise of isolating the user from such details as libvirt domain
+> definitions, and you have instead to take care that your XML is valid *and*
+> that the customized definition is compatible with what crun-qemu expects.
+>
+> Before using this flag, consider if you would be better served using libvirt
+> directly to manage your VM.
 
 [cloud-init]: https://cloud-init.io/
 [domain XML definition]: https://libvirt.org/formatdomain.html
