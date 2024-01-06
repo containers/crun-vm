@@ -4,7 +4,6 @@ use std::fs::File;
 use std::io::Write;
 
 use anyhow::Result;
-use sysinfo::SystemExt;
 use xml::writer::XmlEvent;
 
 use crate::commands::create::custom_opts::{CustomOptions, VfioPciMdevUuid};
@@ -270,12 +269,7 @@ fn get_memory_size(spec: &oci_spec::runtime::Spec) -> u64 {
             .ok()
     })();
 
-    memory_size.unwrap_or_else(|| {
-        let mut system =
-            sysinfo::System::new_with_specifics(sysinfo::RefreshKind::new().with_memory());
-        system.refresh_memory();
-        system.total_memory()
-    })
+    memory_size.unwrap_or_else(|| 2u64.pow(31)) // default to 2 GiB
 }
 
 fn get_cpu_set(spec: &oci_spec::runtime::Spec) -> Option<String> {
