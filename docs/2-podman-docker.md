@@ -296,7 +296,9 @@ $ podman run \
     --cloud-init examples/cloud-init/config
 ```
 
-### vfio-pci devices
+## Advanced options
+
+### PCI device assignment
 
 vfio-pci devices can be passed through to the VM by specifying the non-standard
 `--vfio-pci` option with a path to the device's sysfs directory (this example
@@ -322,8 +324,6 @@ $ podman run \
     quay.io/containerdisks/fedora:39 \
     --vfio-pci-mdev /sys/bus/pci/devices/0000:00:02.0/5fa530b9-9fdf-4cde-8eb7-af73fcdeeaae
 ```
-
-## Advanced options
 
 ### Inspecting and customizing the libvirt domain XML
 
