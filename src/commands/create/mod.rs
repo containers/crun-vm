@@ -67,7 +67,7 @@ fn set_up_container_root(spec: &mut oci_spec::runtime::Spec, bundle_path: &Path)
             .unwrap(),
     ));
 
-    fs::create_dir(spec.root_path())?;
+    fs::create_dir_all(spec.root_path())?;
 
     if let Some(context) = spec.mount_label() {
         // the directory we're using as the root for the container is not the one that podman

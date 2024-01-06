@@ -73,6 +73,11 @@ function __bg_ensure_tty() {
 
 virsh=( virsh --connect "qemu+unix:///session?socket=$socket" --quiet )
 
+# If our container was stopped and is being restarted, the domain may still be
+# defined from the previous run, which would cause `virsh define` below to fail,
+# so we first undefine it.
+"${virsh[@]}" undefine domain &>/dev/null || true
+
 "${virsh[@]}" define /crun-qemu/domain.xml
 
 # trigger graceful shutdown and wait for VM to terminate
