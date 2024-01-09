@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use std::fs::{self, File, OpenOptions};
-use std::io::Write;
+use std::io::{BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -231,7 +231,8 @@ impl FirstBootConfig<'_> {
 
         let mut user_data: serde_json::Value = if let Some(user_path) = &in_config_file_path {
             fs::copy(user_path, &out_config_file_path)?;
-            serde_json::from_reader(File::open(user_path)?).context("invalid config file")?
+            serde_json::from_reader(File::open(user_path).map(BufReader::new)?)
+                .context("invalid config file")?
         } else {
             fs::write(
                 &out_config_file_path,
@@ -421,7 +422,10 @@ impl FirstBootConfig<'_> {
 
         // generate file
 
-        serde_json::to_writer(File::create(&out_config_file_path)?, &user_data)?;
+        serde_json::to_writer(
+            File::create(&out_config_file_path).map(BufWriter::new)?,
+            &user_data,
+        )?;
 
         Ok(())
     }

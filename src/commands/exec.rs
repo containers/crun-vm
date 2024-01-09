@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use std::fs::File;
+use std::{
+    fs::File,
+    io::{BufReader, BufWriter},
+};
 
 use anyhow::Result;
 
@@ -11,7 +14,7 @@ pub fn exec(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Exec) -> Re
 
     let process_config_path = args.process.as_ref().expect("process config");
     let mut process: oci_spec::runtime::Process =
-        serde_json::from_reader(File::open(process_config_path)?)?;
+        serde_json::from_reader(File::open(process_config_path).map(BufReader::new)?)?;
 
     let command = process.args().as_ref().expect("command specified");
 
@@ -42,7 +45,10 @@ pub fn exec(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Exec) -> Re
 
     process.set_args(Some(new_command));
 
-    serde_json::to_writer(File::create(process_config_path)?, &process)?;
+    serde_json::to_writer(
+        File::create(process_config_path).map(BufWriter::new)?,
+        &process,
+    )?;
 
     crun_exec(global_args, args)?;
 
