@@ -16,7 +16,7 @@ jobs:
           dnf install -y \
             bash coreutils crun genisoimage \
             libselinux libvirt-client \
-            libvirt-daemin-driver-qemu \
+            libvirt-daemon-driver-qemu \
             libvirt-daemon-log qemu-img \
             qemu-system-x86-core \
             shadow-utils util-linux \
