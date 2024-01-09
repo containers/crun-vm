@@ -197,11 +197,12 @@ impl CustomOptions {
                     all_are_absolute(&options.cloud_init)
                         && all_are_absolute(&options.ignition)
                         && all_are_absolute(&options.vfio_pci)
-                        && all_are_absolute(&options.vfio_pci_mdev),
+                        && all_are_absolute(&options.vfio_pci_mdev)
+                        && all_are_absolute(&options.merge_libvirt_xml),
                     concat!(
-                        "paths specified using --cloud-init, --ignition, --vfio-pci, or",
-                        " --vfio-pci-mdev must be absolute when using crun-qemu as a Docker",
-                        " runtime",
+                        "paths specified using --cloud-init, --ignition, --vfio-pci,",
+                        " --vfio-pci-mdev, or --merge-libvirt-xml must be absolute when using",
+                        " crun-qemu as a Docker runtime",
                     ),
                 );
             }
@@ -209,10 +210,12 @@ impl CustomOptions {
                 // Custom option paths in Kubernetes refer to paths in the container/VM, and there
                 // isn't a reasonable notion of what the current directory is.
                 ensure!(
-                    all_are_absolute(&options.cloud_init) && all_are_absolute(&options.ignition),
+                    all_are_absolute(&options.cloud_init)
+                        && all_are_absolute(&options.ignition)
+                        && all_are_absolute(&options.merge_libvirt_xml),
                     concat!(
-                        "paths specified using --cloud-init or --ignition must be absolute when",
-                        " using crun-qemu as a Kubernetes runtime",
+                        "paths specified using --cloud-init, --ignition, or --merge-libvirt-xml",
+                        " must be absolute when using crun-qemu as a Kubernetes runtime",
                     ),
                 );
 
@@ -229,6 +232,10 @@ impl CustomOptions {
                 }
 
                 if let Some(path) = &mut options.ignition {
+                    *path = path_in_container_into_path_in_host(spec, &path)?;
+                }
+
+                for path in &mut options.merge_libvirt_xml {
                     *path = path_in_container_into_path_in_host(spec, &path)?;
                 }
             }
