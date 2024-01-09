@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      name:
+        description: 'Release name'
+        required: true
+        default: 'v0.0.0'
+      is-prerelease:
+        description: 'Is this a pre-release?'
+        required: true
+        type: boolean
+        default: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    container: fedora:39
+    permissions:
+      contents: write
+    steps:
+      # Dependencies must be installed before the checkout step, otherwise the
+      # .git directory will be missing and tag creation will fail.
+      - name: Install Dependencies
+        run: |
+          echo "Installing workflow dependencies"
+          dnf install -y git cargo
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Upload to Workflow
+        if: github.event_name != 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: crun-vm
+          path: target/release/
+
+      - name: Create Tag
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "Creating tag"
+          git config --global --add safe.directory /__w/crun-vm/crun-vm
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git tag -a ${{ github.event.inputs.name }} -m "Release ${{ github.event.inputs.name }} from ${{ github.sha }}"
+          git push origin ${{ github.event.inputs.name }}
+
+      - name: Release
+        if: github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v1
+        with:
+          name: ${{ github.event.inputs.name }}
+          tag_name: ${{ github.event.inputs.name }}
+          prerelease: ${{ github.event.inputs.is-prerelease }}
+          files: |
+            target/release/crun-vm
+          token: ${{ secrets.GITHUB_TOKEN }}
