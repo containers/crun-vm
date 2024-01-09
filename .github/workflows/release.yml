@@ -25,6 +25,10 @@ jobs:
           echo "Installing Rust toolchain"
           dnf install -y cargo
 
+      - name: Setup Workarounds
+        run: |
+          ln -sv /usr/lib64/libselinux.so.1 /usr/lib64/libselinux.so
+
       - name: Build
         run: cargo build
 
