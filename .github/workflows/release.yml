@@ -1,7 +1,19 @@
 name: Release
 
 on:
-  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      name:
+        description: 'Release name'
+        required: true
+        default: 'v0.0.0'
+      is-prerelease:
+        description: 'Is this a pre-release?'
+        required: true
+        default: 'true'
 
 jobs:
   release:
@@ -30,10 +42,20 @@ jobs:
           ln -sv /usr/lib64/libselinux.so.1 /usr/lib64/libselinux.so
 
       - name: Build
-        run: cargo build
+        run: cargo build --release
 
-      - name: Publish
-        uses: actions/upload-artifact@v2
+      - name: Upload to Workflow
+        uses: actions/upload-artifact@v3
         with:
-          name: release
-          path: target/debug/crun-qemu
+          name: crun-qemu
+          path: target/release/
+
+      - name: Release
+        if: github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v1
+        with:
+          name: ${{ github.event.inputs.name }}
+          prerelease: ${{ github.event.inputs.is-prerelease }}
+          files: |
+            target/release/crun-qemu
+          token: ${{ secrets.GITHUB_TOKEN }}
