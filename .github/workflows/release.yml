@@ -16,7 +16,8 @@ on:
       is-prerelease:
         description: 'Is this a pre-release?'
         required: true
-        default: 'true'
+        type: boolean
+        default: true
 
 jobs:
   release:
@@ -44,7 +45,7 @@ jobs:
         run: cargo build --release
 
       - name: Upload to Workflow
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: crun-qemu
           path: target/release/
