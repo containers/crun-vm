@@ -13,6 +13,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
+          echo "Installing build dependencies"
           dnf install -y \
             bash coreutils crun genisoimage \
             libselinux libvirt-client \
@@ -21,6 +22,8 @@ jobs:
             qemu-system-x86-core \
             shadow-utils util-linux \
             virtiofsd
+          echo "Installing Rust toolchain"
+          dnf install -y cargo
 
       - name: Build
         run: cargo build
