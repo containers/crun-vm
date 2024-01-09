@@ -1,0 +1,32 @@
+name: Release
+
+on:
+  pull_request:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    container: fedora:39
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          dnf install -y \
+            bash coreutils crun genisoimage \
+            libselinux libvirt-client \
+            libvirt-daemin-driver-qemu \
+            libvirt-daemon-log qemu-img \
+            qemu-system-x86-core \
+            shadow-utils util-linux \
+            virtiofsd
+
+      - name: Build
+        run: cargo build
+
+      - name: Publish
+        uses: actions/upload-artifact@v2
+        with:
+          name: release
+          path: target/debug/crun-qemu
