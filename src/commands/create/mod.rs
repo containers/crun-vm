@@ -39,6 +39,7 @@ pub fn create(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Create) -
     let mut mounts = Mounts::default();
     set_up_mounts(&mut spec, &mut mounts)?;
     set_up_devices(&mut spec, &mut mounts)?;
+    set_up_blockdevs(&mut spec, &mut mounts, &custom_options)?;
 
     set_up_extra_container_mounts_and_devices(&mut spec)?;
     set_up_security(&mut spec);
@@ -196,6 +197,7 @@ struct Mounts {
 }
 
 struct BlockDeviceMount {
+    format: String,
     is_regular_file: bool,
     path_in_container: PathBuf,
     path_in_guest: PathBuf,
@@ -270,6 +272,7 @@ fn set_up_mounts(spec: &mut oci_spec::runtime::Spec, mounts: &mut Mounts) -> Res
                     let path_in_guest = oci_mount.destination().clone();
 
                     mounts.block_device.push(BlockDeviceMount {
+                        format: "raw".to_string(),
                         is_regular_file: meta.file_type().is_file(),
                         path_in_container: path_in_container.clone(),
                         path_in_guest,
@@ -335,10 +338,57 @@ fn set_up_devices(spec: &mut oci_spec::runtime::Spec, mounts: &mut Mounts) -> Re
         )?;
 
         mounts.block_device.push(BlockDeviceMount {
+            format: "raw".to_string(),
             is_regular_file: false,
             path_in_container,
             path_in_guest,
             readonly: mode & 0o222 == 0,
+        });
+    }
+
+    Ok(())
+}
+
+fn set_up_blockdevs(
+    spec: &mut oci_spec::runtime::Spec,
+    mounts: &mut Mounts,
+    custom_options: &CustomOptions,
+) -> Result<()> {
+    // set up devices specified using --blockdev
+
+    for blockdev in &custom_options.blockdev {
+        let meta = blockdev.source.metadata()?;
+        ensure!(
+            meta.file_type().is_file() || meta.file_type().is_block_device(),
+            "blockdev source must be a regular file or a block device"
+        );
+
+        let path_in_container = PathBuf::from(format!(
+            "crun-qemu/mounts/block/{}",
+            mounts.block_device.len()
+        ));
+        let path_in_guest = blockdev.target.clone();
+
+        fs::create_dir_all(spec.root_path().join(&path_in_container).parent().unwrap())?;
+
+        // mount from the host to the container
+        spec.mounts_push(
+            oci_spec::runtime::MountBuilder::default()
+                .typ("bind")
+                .source(blockdev.source.canonicalize()?)
+                .destination(&path_in_container)
+                .options(["bind".to_string(), "rprivate".to_string()])
+                .build()
+                .unwrap(),
+        );
+
+        // and mount from the container to the guest
+        mounts.block_device.push(BlockDeviceMount {
+            format: blockdev.format.clone(),
+            is_regular_file: meta.is_file(),
+            path_in_container,
+            path_in_guest,
+            readonly: false,
         });
     }
 

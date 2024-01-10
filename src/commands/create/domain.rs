@@ -110,6 +110,7 @@ fn generate(
 
                 s(w, "disk", &[("type", typ), ("device", "disk")], |w| {
                     se(w, "target", &[("dev", &next_dev_name()), ("bus", "virtio")])?;
+                    se(w, "driver", &[("name", "qemu"), ("type", &dev.format)])?;
                     se(
                         w,
                         "source",

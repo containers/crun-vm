@@ -258,8 +258,7 @@ $ mount -t virtiofs virtiofs-<index> /home/fedora/util
 
 ### Regular files
 
-Similarly to directories, you can bind mount regular files into the VM, where
-they appear as block devices:
+Similarly to directories, you can bind mount regular files into the VM:
 
 > [!WARNING]
 >
@@ -273,6 +272,9 @@ $ podman run \
     quay.io/containerdisks/fedora:39 \
     --password pass
 ```
+
+Regular files currently appear as block devices in the VM, but this is subject
+to change.
 
 ### Block devices
 
@@ -288,6 +290,24 @@ $ podman run \
     --device /dev/ram0:/home/fedora/my-disk \
     quay.io/containerdisks/fedora:39 \
     --password pass
+```
+
+You can also use the more powerful `--blockdev
+source=<path>,target=<path>,format=<fmt>` custom option to this effect. This
+option also allows you specify a regular file as the source, and the source may
+be in any disk format known to QEMU (*e.g.*, raw, qcow2; when using `--device`,
+raw format is assumed):
+
+> For this command to work with Docker, you must provide absolute paths to
+> `--blockdev`.
+
+```console
+$ podman run \
+    --runtime crun-qemu \
+    -it --rm \
+    quay.io/containerdisks/fedora:39 \
+    --password pass \
+    --blockdev source=my-disk.qcow2,target=/home/fedora/my-disk,format=qcow2
 ```
 
 ## Advanced options

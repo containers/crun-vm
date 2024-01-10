@@ -19,6 +19,7 @@ virtualization technologies like libvirt or KubeVirt.
   - Provide **cloud-init** and **Ignition** configurations to VMs.
   - **Mount directories** into VMs.
   - Pass **block devices** through to VMs.
+  - Expose qcow2 files and other disk images to VMs as block devices.
   - Pass **vfio-pci** and **mediated vfio-pci** devices through to VMs.
   - **Forward ports** from the host to VMs.
   - **`podman exec`**/**`docker exec`**/**`kubectl exec`** into VMs.

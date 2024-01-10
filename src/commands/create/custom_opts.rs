@@ -2,6 +2,7 @@
 
 use std::iter;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use anyhow::{anyhow, ensure, Result};
 use clap::Parser;
@@ -10,6 +11,36 @@ use regex::Regex;
 
 use crate::commands::create::runtime_env::RuntimeEnv;
 use crate::util::PathExt;
+
+#[derive(Clone, Debug)]
+pub struct Blockdev {
+    pub source: PathBuf,
+    pub target: PathBuf,
+    pub format: String,
+}
+
+impl FromStr for Blockdev {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Blockdev> {
+        lazy_static! {
+            static ref PATTERN: Regex =
+                Regex::new(r"^source=([^,]+),target=([^,]+),format=([^,]+)$").unwrap();
+        }
+
+        let captures = PATTERN
+            .captures(s)
+            .ok_or_else(|| anyhow!("invalid --blockdev option"))?;
+
+        let blockdev = Blockdev {
+            source: PathBuf::from(&captures[1]),
+            target: PathBuf::from(&captures[2]),
+            format: captures[3].to_string(),
+        };
+
+        Ok(blockdev)
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct VfioPciAddress {
@@ -82,6 +113,7 @@ impl VfioPciMdevUuid {
 
 #[derive(Debug)]
 pub struct CustomOptions {
+    pub blockdev: Vec<Blockdev>,
     pub persistent: bool,
     pub cloud_init: Option<PathBuf>,
     pub ignition: Option<PathBuf>,
@@ -97,6 +129,7 @@ impl TryFrom<CustomOptionsRaw> for CustomOptions {
 
     fn try_from(opts: CustomOptionsRaw) -> Result<Self> {
         Ok(Self {
+            blockdev: opts.blockdev,
             persistent: opts.persistent,
             cloud_init: opts.cloud_init,
             ignition: opts.ignition,
@@ -119,6 +152,9 @@ impl TryFrom<CustomOptionsRaw> for CustomOptions {
 
 #[derive(clap::Parser, Debug)]
 struct CustomOptionsRaw {
+    #[clap(long)]
+    blockdev: Vec<Blockdev>,
+
     #[clap(long)]
     persistent: bool,
 
@@ -194,13 +230,14 @@ impl CustomOptions {
                 //
                 // TODO: There must be a better way...
                 ensure!(
-                    all_are_absolute(&options.cloud_init)
+                    all_are_absolute(options.blockdev.iter().flat_map(|b| [&b.source, &b.target]))
+                        && all_are_absolute(&options.cloud_init)
                         && all_are_absolute(&options.ignition)
                         && all_are_absolute(&options.vfio_pci)
                         && all_are_absolute(&options.vfio_pci_mdev)
                         && all_are_absolute(&options.merge_libvirt_xml),
                     concat!(
-                        "paths specified using --cloud-init, --ignition, --vfio-pci,",
+                        "paths specified using --blockdev, --cloud-init, --ignition, --vfio-pci,",
                         " --vfio-pci-mdev, or --merge-libvirt-xml must be absolute when using",
                         " crun-qemu as a Docker runtime",
                     ),
@@ -210,12 +247,14 @@ impl CustomOptions {
                 // Custom option paths in Kubernetes refer to paths in the container/VM, and there
                 // isn't a reasonable notion of what the current directory is.
                 ensure!(
-                    all_are_absolute(&options.cloud_init)
+                    all_are_absolute(options.blockdev.iter().flat_map(|b| [&b.source, &b.target]))
+                        && all_are_absolute(&options.cloud_init)
                         && all_are_absolute(&options.ignition)
                         && all_are_absolute(&options.merge_libvirt_xml),
                     concat!(
-                        "paths specified using --cloud-init, --ignition, or --merge-libvirt-xml",
-                        " must be absolute when using crun-qemu as a Kubernetes runtime",
+                        "paths specified using --blockdev, --cloud-init, --ignition, or",
+                        " --merge-libvirt-xml must be absolute when using crun-qemu as a",
+                        " Kubernetes runtime",
                     ),
                 );
 
@@ -226,6 +265,11 @@ impl CustomOptions {
                         " crun-qemu as a Kubernetes runtime",
                     )
                 );
+
+                for blockdev in &mut options.blockdev {
+                    blockdev.source = path_in_container_into_path_in_host(spec, &blockdev.source)?;
+                    blockdev.target = path_in_container_into_path_in_host(spec, &blockdev.target)?;
+                }
 
                 if let Some(path) = &mut options.cloud_init {
                     *path = path_in_container_into_path_in_host(spec, &path)?;
