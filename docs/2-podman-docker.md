@@ -238,16 +238,13 @@ Bind mounting directories into the VM is supported:
 > Alternatively, you may remove this modifier from the command below and add
 > `--security-opt label=disable` instead to disable SELinux enforcement.
 
-> For this command to work with Docker, you must provide an absolute path to
-> `--cloud-init`.
-
 ```console
 $ podman run \
     --runtime crun-qemu \
     -it --rm \
     -v ./util:/home/fedora/util:z \
     quay.io/containerdisks/fedora:39 \
-    --cloud-init examples/cloud-init/config
+    --password pass
 ```
 
 If the VM supports cloud-init or Ignition, the volume will automatically be
@@ -274,7 +271,7 @@ $ podman run \
     -it --rm \
     -v ./README.md:/home/fedora/README.md:z \
     quay.io/containerdisks/fedora:39 \
-    --cloud-init examples/cloud-init/config
+    --password pass
 ```
 
 ### Block devices
@@ -284,16 +281,13 @@ devices through to it at a specific path using podman-run's `--device` flag
 (this example assumes `/dev/ram0` to exist and to be accessible by the current
 user):
 
-> For this command to work with Docker, you must provide an absolute path to
-> `--cloud-init`.
-
 ```console
 $ podman run \
     --runtime crun-qemu \
     -it --rm \
     --device /dev/ram0:/home/fedora/my-disk \
     quay.io/containerdisks/fedora:39 \
-    --cloud-init examples/cloud-init/config
+    --password pass
 ```
 
 ## Advanced options
