@@ -6,7 +6,7 @@ set -o errexit -o pipefail -o nounset
 script_dir="$( dirname "$0" | xargs readlink -e )"
 
 __minikube() {
-    minikube -p=crun-qemu-example "$@"
+    minikube -p=crun-vm-example "$@"
 }
 
 __cp() {
@@ -53,12 +53,12 @@ __apt_get install -yq --no-install-recommends \
 # configure runtime
 
 __ssh 'tee --append /etc/crio/crio.conf <<EOF
-[crio.runtime.runtimes.crun-qemu]
-runtime_path = "/usr/local/bin/crun-qemu"
+[crio.runtime.runtimes.crun-vm]
+runtime_path = "/usr/local/bin/crun-vm"
 EOF'
 
-__cp "${script_dir}/../../target/debug/crun-qemu" /usr/local/bin/crun-qemu
-__ssh chmod +x /usr/local/bin/crun-qemu
+__cp "${script_dir}/../../target/debug/crun-vm" /usr/local/bin/crun-vm
+__ssh chmod +x /usr/local/bin/crun-vm
 
 # reload cluster so that the new runtime is picked up
 
@@ -70,6 +70,6 @@ kubectl create -f - <<EOF
 apiVersion: node.k8s.io/v1
 kind: RuntimeClass
 metadata:
-  name: crun-qemu
-handler: crun-qemu
+  name: crun-vm
+handler: crun-vm
 EOF

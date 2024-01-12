@@ -239,7 +239,7 @@ impl CustomOptions {
                     concat!(
                         "paths specified using --blockdev, --cloud-init, --ignition, --vfio-pci,",
                         " --vfio-pci-mdev, or --merge-libvirt-xml must be absolute when using",
-                        " crun-qemu as a Docker runtime",
+                        " crun-vm as a Docker runtime",
                     ),
                 );
             }
@@ -253,7 +253,7 @@ impl CustomOptions {
                         && all_are_absolute(&options.merge_libvirt_xml),
                     concat!(
                         "paths specified using --blockdev, --cloud-init, --ignition, or",
-                        " --merge-libvirt-xml must be absolute when using crun-qemu as a",
+                        " --merge-libvirt-xml must be absolute when using crun-vm as a",
                         " Kubernetes runtime",
                     ),
                 );
@@ -262,7 +262,7 @@ impl CustomOptions {
                     options.vfio_pci.is_empty() && options.vfio_pci_mdev.is_empty(),
                     concat!(
                         "options --vfio-pci and --vfio-pci-mdev are not allowed when using",
-                        " crun-qemu as a Kubernetes runtime",
+                        " crun-vm as a Kubernetes runtime",
                     )
                 );
 

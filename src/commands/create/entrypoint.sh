@@ -37,12 +37,12 @@ fi
 
 # libvirt doesn't let us pass --modcaps to virtiofsd (which we use to avoid
 # having virtiofsd unsuccessfully attempt to acquire additional capabilities),
-# so we tell libvirt to use the /crun-qemu/virtiofsd script below.
-cat <<'EOF' >/crun-qemu/virtiofsd
+# so we tell libvirt to use the /crun-vm/virtiofsd script below.
+cat <<'EOF' >/crun-vm/virtiofsd
 #!/bin/bash
 /usr/libexec/virtiofsd --modcaps=-mknod:-setfcap "$@"
 EOF
-chmod +x /crun-qemu/virtiofsd
+chmod +x /crun-vm/virtiofsd
 
 # When running under Docker or rootful Podman, passt will realize that it is
 # running as *actual* root and will switch to being user nobody, but this will
@@ -53,11 +53,11 @@ mkdir -p /run/libvirt/qemu/passt
 chmod o+w /run/libvirt/qemu/passt
 
 # add debugging helper script to run virsh
-cat <<EOF >/crun-qemu/virsh
+cat <<EOF >/crun-vm/virsh
 #!/bin/bash
 virsh --connect "qemu+unix:///session?socket=$socket" "\$@"
 EOF
-chmod +x /crun-qemu/virsh
+chmod +x /crun-vm/virsh
 
 # launch VM
 
@@ -78,7 +78,7 @@ virsh=( virsh --connect "qemu+unix:///session?socket=$socket" --quiet )
 # so we first undefine it.
 "${virsh[@]}" undefine domain &>/dev/null || true
 
-"${virsh[@]}" define /crun-qemu/domain.xml
+"${virsh[@]}" define /crun-vm/domain.xml
 
 # trigger graceful shutdown and wait for VM to terminate
 function __shutdown() {

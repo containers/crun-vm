@@ -1,6 +1,6 @@
-# 2. Using crun-qemu as a Podman or Docker runtime
+# 2. Using crun-vm as a Podman or Docker runtime
 
-Here we overview some of the major features provided by crun-qemu.
+Here we overview some of the major features provided by crun-vm.
 
 To run the examples below using Docker instead of Podman, you must additionally
 pass `--security-opt label=disable` to docker-run. Other than that, and unless
@@ -26,7 +26,7 @@ Then run:
 
 ```console
 $ podman run \
-    --runtime crun-qemu \
+    --runtime crun-vm \
     -it --rm \
     --rootfs my-vm-image \
     ""  # unused, but must specify command
@@ -65,7 +65,7 @@ image file. This can be changed by passing in the non-standard option
 
 ```console
 $ podman run \
-    --runtime crun-qemu \
+    --runtime crun-vm \
     -it --rm \
     --rootfs my-vm-image \
     --persistent
@@ -79,14 +79,14 @@ $ podman run \
 
 ### From VM image files packaged into container images
 
-crun-qemu also works with container images that contain a VM image file with
+crun-vm also works with container images that contain a VM image file with
 any name under `/` or under `/disk/`. No other files may exist in those
 directories. Containers built for use as [KubeVirt `containerDisk`s] follow this
 convention, so you can use those here:
 
 ```console
 $ podman run \
-    --runtime crun-qemu \
+    --runtime crun-vm \
     -it --rm \
     quay.io/containerdisks/fedora:39 \
     ""  # unused, but must specify command because container image does not
@@ -116,7 +116,7 @@ $ ls examples/cloud-init/config/
 meta-data  user-data  vendor-data
 
 $ podman run \
-    --runtime crun-qemu \
+    --runtime crun-vm \
     -it --rm \
     quay.io/containerdisks/fedora:39 \
     --cloud-init examples/cloud-init/config
@@ -130,7 +130,7 @@ option:
 
 ```console
 $ podman run \
-    --runtime crun-qemu \
+    --runtime crun-vm \
     -it --rm \
     quay.io/containerdisks/fedora:39 \
     --password pass
@@ -146,9 +146,9 @@ the `--ignition` option:
 
 ```console
 $ podman run \
-    --runtime crun-qemu \
+    --runtime crun-vm \
     -it --rm \
-    quay.io/crun-qemu/example-fedora-coreos:39 \
+    quay.io/crun-vm/example-fedora-coreos:39 \
     --ignition examples/ignition/config.ign
 ```
 
@@ -168,7 +168,7 @@ port 22, you can `ssh` into it using podman-exec as the VMs default user:
 
 ```console
 $ podman run \
-    --runtime crun-qemu \
+    --runtime crun-vm \
     --detach --rm \
     quay.io/containerdisks/fedora:39 \
     ""
@@ -193,7 +193,7 @@ no command is specified, a login shell is initiated. In this case, you probably
 also want to pass flags `-it` to podman-exec.
 
 If you actually just want to exec into the container in which the VM is running
-(probably to debug some problem with crun-qemu itself), pass in `-` as the
+(probably to debug some problem with crun-vm itself), pass in `-` as the
 username.
 
 ## Port forwarding
@@ -203,10 +203,10 @@ UDP port forwarding:
 
 ```console
 $ podman run \
-    --runtime crun-qemu \
+    --runtime crun-vm \
     --detach --rm \
     -p 8000:80 \
-    quay.io/crun-qemu/example-http-server:latest \
+    quay.io/crun-vm/example-http-server:latest \
     ""
 36c8705482589cfc4336a03d3802e7699f5fb228123d18e693488ac7b80116d1
 
@@ -240,7 +240,7 @@ Bind mounting directories into the VM is supported:
 
 ```console
 $ podman run \
-    --runtime crun-qemu \
+    --runtime crun-vm \
     -it --rm \
     -v ./util:/home/fedora/util:z \
     quay.io/containerdisks/fedora:39 \
@@ -266,7 +266,7 @@ Similarly to directories, you can bind mount regular files into the VM:
 
 ```console
 $ podman run \
-    --runtime crun-qemu \
+    --runtime crun-vm \
     -it --rm \
     -v ./README.md:/home/fedora/README.md:z \
     quay.io/containerdisks/fedora:39 \
@@ -285,7 +285,7 @@ user):
 
 ```console
 $ podman run \
-    --runtime crun-qemu \
+    --runtime crun-vm \
     -it --rm \
     --device /dev/ram0:/home/fedora/my-disk \
     quay.io/containerdisks/fedora:39 \
@@ -303,7 +303,7 @@ raw format is assumed):
 
 ```console
 $ podman run \
-    --runtime crun-qemu \
+    --runtime crun-vm \
     -it --rm \
     quay.io/containerdisks/fedora:39 \
     --password pass \
@@ -321,7 +321,7 @@ the current user):
 
 ```console
 $ podman run \
-    --runtime crun-qemu \
+    --runtime crun-vm \
     -it --rm \
     quay.io/containerdisks/fedora:39 \
     --vfio-pci /sys/bus/pci/devices/0000:00:01.0
@@ -333,7 +333,7 @@ directory:
 
 ```console
 $ podman run \
-    --runtime crun-qemu \
+    --runtime crun-vm \
     -it --rm \
     quay.io/containerdisks/fedora:39 \
     --vfio-pci-mdev /sys/bus/pci/devices/0000:00:02.0/5fa530b9-9fdf-4cde-8eb7-af73fcdeeaae
@@ -341,7 +341,7 @@ $ podman run \
 
 ### Inspecting and customizing the libvirt domain XML
 
-crun-qemu internally uses [libvirt] to launch a VM, generating a [domain XML
+crun-vm internally uses [libvirt] to launch a VM, generating a [domain XML
 definition] from the options provided to podman-run. This XML definition can be
 printed by adding the non-standard `--print-libvirt-xml` flag to your podman-run
 invocation.
@@ -352,9 +352,9 @@ be merged with it using the non-standard option `--merge-libvirt-xml <file>`.
 > [!NOTE]
 >
 > While `--merge-libvirt-xml` gives you maximum flexibility, it thwarts
-> crun-qemu's premise of isolating the user from such details as libvirt domain
+> crun-vm's premise of isolating the user from such details as libvirt domain
 > definitions, and you have instead to take care that your XML is valid *and*
-> that the customized definition is compatible with what crun-qemu expects.
+> that the customized definition is compatible with what crun-vm expects.
 >
 > Before using this flag, consider if you would be better served using libvirt
 > directly to manage your VM.

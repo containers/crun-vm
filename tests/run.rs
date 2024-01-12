@@ -77,10 +77,10 @@ fn complex_test_case(
     // cases
     [
         simple_test_case("quay.io/containerdisks/fedora:39", "/home/fedora"),
-        simple_test_case("quay.io/crun-qemu/example-fedora-coreos:39", "/var/home/core"),
+        simple_test_case("quay.io/crun-vm/example-fedora-coreos:39", "/var/home/core"),
 
         complex_test_case("quay.io/containerdisks/fedora:39", "/home/fedora", REPO_PATH),
-        complex_test_case("quay.io/crun-qemu/example-fedora-coreos:39", "/var/home/core", REPO_PATH),
+        complex_test_case("quay.io/crun-vm/example-fedora-coreos:39", "/var/home/core", REPO_PATH),
     ]
 )]
 #[test_matrix(
@@ -92,7 +92,7 @@ fn complex_test_case(
     // cases
     [
         complex_test_case("quay.io/containerdisks/fedora:39", "/home/fedora", ""),
-        complex_test_case("quay.io/crun-qemu/example-fedora-coreos:39", "/var/home/core", ""),
+        complex_test_case("quay.io/crun-vm/example-fedora-coreos:39", "/var/home/core", ""),
     ]
 )]
 fn test_run(engine: Engine, case: TestCase) {
@@ -178,7 +178,7 @@ fn test_run(engine: Engine, case: TestCase) {
     result.unwrap();
 }
 
-const BINARY_PATH: &str = env!("CARGO_BIN_EXE_crun-qemu");
+const BINARY_PATH: &str = env!("CARGO_BIN_EXE_crun-vm");
 const REPO_PATH: &str = env!("CARGO_MANIFEST_DIR");
 
 struct TestCase {
@@ -188,7 +188,7 @@ struct TestCase {
 }
 
 fn get_random_container_name() -> String {
-    format!("crun-qemu-test-{}", Uuid::new_v4())
+    format!("crun-vm-test-{}", Uuid::new_v4())
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -214,7 +214,7 @@ impl Engine {
                 }
                 Engine::Docker => {
                     cmd.arg("--security-opt=label=disable");
-                    cmd.arg("--runtime=crun-qemu");
+                    cmd.arg("--runtime=crun-vm");
                 }
             }
         }

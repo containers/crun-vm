@@ -38,7 +38,7 @@ pub fn main(args: impl IntoIterator<Item = impl AsRef<OsStr>>) -> Result<()> {
         .collect::<Vec<_>>();
 
     let parsed_args =
-        Args::parse_from(iter::once(&OsStr::new("crun-qemu").to_os_string()).chain(&args));
+        Args::parse_from(iter::once(&OsStr::new("crun-vm").to_os_string()).chain(&args));
 
     match parsed_args.command {
         Command::Standard(cmd) => {

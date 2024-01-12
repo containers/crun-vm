@@ -182,7 +182,7 @@ impl FirstBootConfig<'_> {
             };
 
             let mut mapping = serde_yaml::Mapping::new();
-            mapping.insert("path".into(), "/etc/udev/rules.d/99-crun-qemu.rules".into());
+            mapping.insert("path".into(), "/etc/udev/rules.d/99-crun-vm.rules".into());
             mapping.insert("content".into(), rules.into());
 
             write_files.push(mapping.into());
@@ -340,7 +340,7 @@ impl FirstBootConfig<'_> {
 
         if let Some(rules) = self.get_block_device_udev_rules() {
             files.push(serde_json::json!({
-                "path": "/etc/udev/rules.d/99-crun-qemu.rules",
+                "path": "/etc/udev/rules.d/99-crun-vm.rules",
                 "mode": 0o644,
                 "overwrite": true,
                 "contents": {
@@ -435,7 +435,7 @@ impl FirstBootConfig<'_> {
 
         for (i, dev) in self.mounts.block_device.iter().enumerate() {
             if dev.path_in_guest.parent() != Some(Path::new("/dev")) {
-                let target = PathBuf::from(format!("/dev/disk/by-id/virtio-crun-qemu-block-{i}"));
+                let target = PathBuf::from(format!("/dev/disk/by-id/virtio-crun-vm-block-{i}"));
                 symlinks.push((dev.path_in_guest.as_path(), target));
             }
         }
@@ -449,7 +449,7 @@ impl FirstBootConfig<'_> {
         for (i, dev) in self.mounts.block_device.iter().enumerate() {
             if dev.path_in_guest.parent() == Some(Path::new("/dev")) {
                 rules.push_str(&format!(
-                    "ENV{{ID_SERIAL}}==\"crun-qemu-block-{}\", SYMLINK+=\"{}\"\n",
+                    "ENV{{ID_SERIAL}}==\"crun-vm-block-{}\", SYMLINK+=\"{}\"\n",
                     i,
                     dev.path_in_guest.file_name().unwrap().as_str(),
                 ));

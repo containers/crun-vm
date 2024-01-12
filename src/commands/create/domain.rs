@@ -17,7 +17,7 @@ pub fn set_up_libvirt_domain_xml(
     mounts: &Mounts,
     custom_options: &CustomOptions,
 ) -> Result<()> {
-    let path = spec.root_path().join("crun-qemu/domain.xml");
+    let path = spec.root_path().join("crun-vm/domain.xml");
 
     generate(&path, spec, vm_image_info, mounts, custom_options)?;
     merge_overlays(&path, &custom_options.merge_libvirt_xml)?;
@@ -63,7 +63,7 @@ fn generate(
                 "entry",
                 &[
                     ("name", "opt/com.coreos/config"),
-                    ("file", "/crun-qemu/first-boot/ignition.ign"),
+                    ("file", "/crun-vm/first-boot/ignition.ign"),
                 ],
             )
         })?;
@@ -119,7 +119,7 @@ fn generate(
                     if dev.readonly {
                         se(w, "readonly", &[])?;
                     }
-                    st(w, "serial", &[], &format!("crun-qemu-block-{i}"))?;
+                    st(w, "serial", &[], &format!("crun-vm-block-{i}"))?;
                     Ok(())
                 })?;
             }
@@ -128,7 +128,7 @@ fn generate(
                 se(
                     w,
                     "source",
-                    &[("file", "/crun-qemu/first-boot/cloud-init.iso")],
+                    &[("file", "/crun-vm/first-boot/cloud-init.iso")],
                 )?;
                 se(w, "target", &[("dev", &next_dev_name()), ("bus", "virtio")])?;
                 Ok(())
@@ -151,7 +151,7 @@ fn generate(
                     s(
                         w,
                         "binary",
-                        &[("path", "/crun-qemu/virtiofsd"), ("xattr", "on")],
+                        &[("path", "/crun-vm/virtiofsd"), ("xattr", "on")],
                         |w| se(w, "sandbox", &[("mode", "chroot")]),
                     )?;
                     se(w, "source", &[("dir", path)])?;
