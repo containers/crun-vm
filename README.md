@@ -1,10 +1,10 @@
 # The crun-vm OCI Runtime
 
-This is an **experimental** [OCI Runtime] that enables [Podman], [Docker], and
-[Kubernetes] to run Virtual Machine (VM) images. The objective is to make
-running VMs (in simple configurations) as easy as running containers, using
-standard container tooling and without the need for in-depth knowledge on
-virtualization technologies like libvirt or KubeVirt.
+crun-vm is an **experimental** [OCI Runtime] that enables [Podman], [Docker],
+and [Kubernetes] to run QEMU-compatible Virtual Machine (VM) images. The
+objective is to make running VMs (in simple configurations) as easy as running
+containers, using standard container tooling and without the need for in-depth
+knowledge on virtualization technologies like libvirt or KubeVirt.
 
 <p align="center">
   <img src="docs/example.gif" width="680" />
