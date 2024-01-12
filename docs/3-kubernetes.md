@@ -1,40 +1,40 @@
-# 3. Using crun-qemu as a Kubernetes runtime
+# 3. Using crun-vm as a Kubernetes runtime
 
-It is possible to use crun-qemu as a [Kubernetes] runtime, allowing you to run
+It is possible to use crun-vm as a [Kubernetes] runtime, allowing you to run
 VMs as regular pods.
 
 ## Preparation
 
-To enable crun-qemu on a Kubernetes cluster, follow these steps:
+To enable crun-vm on a Kubernetes cluster, follow these steps:
 
 1. Ensure that the cluster is using the [CRI-O] container runtime. Refer to the
    Kubernetes docs on [container runtimes].
 
-2. Install crun-qemu on all cluster nodes where pods may be scheduled. Refer to
+2. Install crun-vm on all cluster nodes where pods may be scheduled. Refer to
    the [installation instructions].
 
 3. Append the following to `/etc/crio/crio.conf` (adjust the `runtime_path` if
    necessary):
 
    ```toml
-   [crio.runtime.runtimes.crun-qemu]
-   runtime_path = "/usr/local/bin/crun-qemu"
+   [crio.runtime.runtimes.crun-vm]
+   runtime_path = "/usr/local/bin/crun-vm"
    ```
 
-4. Create a `RuntimeClass` that references crun-qemu:
+4. Create a `RuntimeClass` that references crun-vm:
 
    ```yaml
    apiVersion: node.k8s.io/v1
    kind: RuntimeClass
    metadata:
-     name: crun-qemu
-   handler: crun-qemu
+     name: crun-vm
+   handler: crun-vm
    ```
 
 ## Using the runtime
 
 > Under [examples/minikube] you can find a script that sets up a local minikube
-> Kubernetes cluster with crun-qemu available as a runtime. You can use it to
+> Kubernetes cluster with crun-vm available as a runtime. You can use it to
 > easily try out the examples below.
 
 From then on, you can run VM images packaged in container images by creating
@@ -48,12 +48,12 @@ metadata:
 spec:
   containers:
     - name: my-vm
-      image: quay.io/crun-qemu/example-http-server:latest
+      image: quay.io/crun-vm/example-http-server:latest
       args:
         - ""  # unused, but must specify command because container image does not
       ports:
         - containerPort: 80
-  runtimeClassName: crun-qemu
+  runtimeClassName: crun-vm
 ```
 
 ### Logging
@@ -107,7 +107,7 @@ $ curl localhost:8000
 
 ### cloud-init and Ignition
 
-When using crun-qemu as a Kubernetes runtime, paths given to `--cloud-init` and
+When using crun-vm as a Kubernetes runtime, paths given to `--cloud-init` and
 `--ignition` are interpreted in the context of the container/VM, instead of the
 host. This means that config files can be retrieved from mounted volumes. For
 instance, you could store your cloud-init config in a `ConfigMap`:
@@ -145,7 +145,7 @@ spec:
     - name: cloud-init-vol
       configMap:
         name: my-cloud-init-config
-  runtimeClassName: crun-qemu
+  runtimeClassName: crun-vm
 ```
 
 [container runtimes]: https://kubernetes.io/docs/setup/production-environment/container-runtimes/#cri-o

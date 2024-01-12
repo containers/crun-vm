@@ -50,7 +50,7 @@ pub fn create(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Create) -
     adjust_container_resources(&mut spec);
 
     spec.save(&config_path)?;
-    spec.save(spec.root_path().join("crun-qemu/config.json"))?; // to aid debugging
+    spec.save(spec.root_path().join("crun-vm/config.json"))?; // to aid debugging
 
     crun_create(global_args, args)?; // actually create container
 
@@ -66,7 +66,7 @@ fn set_up_container_root(
 
     spec.set_root(Some(
         oci_spec::runtime::RootBuilder::default()
-            .path(bundle_path.join("crun-qemu-root"))
+            .path(bundle_path.join("crun-vm-root"))
             .readonly(false)
             .build()
             .unwrap(),
@@ -85,15 +85,15 @@ fn set_up_container_root(
 
     const ENTRYPOINT_BYTES: &[u8] = include_bytes!("entrypoint.sh");
 
-    let entrypoint_path: PathBuf = spec.root_path().join("crun-qemu/entrypoint.sh");
+    let entrypoint_path: PathBuf = spec.root_path().join("crun-vm/entrypoint.sh");
     fs::create_dir_all(entrypoint_path.parent().unwrap())?;
 
     fs::write(&entrypoint_path, ENTRYPOINT_BYTES)?;
     fs::set_permissions(&entrypoint_path, Permissions::from_mode(0o555))?;
 
     let command = match custom_options.print_libvirt_xml {
-        true => vec!["cat", "/crun-qemu/domain.xml"],
-        false => vec!["/crun-qemu/entrypoint.sh"],
+        true => vec!["cat", "/crun-vm/domain.xml"],
+        false => vec!["/crun-vm/entrypoint.sh"],
     };
 
     spec.set_process({
@@ -127,7 +127,7 @@ fn set_up_vm_image(
     // mount user-provided VM image file into container
 
     let mirror_vm_image_path_in_container =
-        Path::new("crun-qemu/image").join(vm_image_path_in_host.file_name().unwrap());
+        Path::new("crun-vm/image").join(vm_image_path_in_host.file_name().unwrap());
     let mirror_vm_image_path_in_host = spec.root_path().join(&mirror_vm_image_path_in_container);
     let mirror_vm_image_path_in_container = Path::new("/").join(mirror_vm_image_path_in_container);
 
@@ -135,7 +135,7 @@ fn set_up_vm_image(
         let vm_image_dir_path = vm_image_path_in_host.parent().unwrap();
         let vm_image_dir_name = vm_image_dir_path.file_name().unwrap();
 
-        let overlay_private_dir_name = format!(".crun-qemu.{}.tmp", vm_image_dir_name.as_str());
+        let overlay_private_dir_name = format!(".crun-vm.{}.tmp", vm_image_dir_name.as_str());
         let overlay_private_dir_path = vm_image_dir_path
             .parent()
             .unwrap()
@@ -143,7 +143,7 @@ fn set_up_vm_image(
 
         overlay_private_dir_path
     } else {
-        bundle_path.join("crun-qemu-vm-image-overlayfs")
+        bundle_path.join("crun-vm-vm-image-overlayfs")
     };
 
     // We may need to change the VM image context to actually be able to access it, but we don't
@@ -174,7 +174,7 @@ fn set_up_vm_image(
         // ensure that we get copy-on-write and page cache sharing even when the underlying file
         // system doesn't support reflinks, we create a qcow2 overlay and use that as the image.
 
-        let overlay_vm_image_path_in_container = PathBuf::from("crun-qemu/image-overlay.qcow2");
+        let overlay_vm_image_path_in_container = PathBuf::from("crun-vm/image-overlay.qcow2");
         let overlay_vm_image_path_in_host =
             spec.root_path().join(&overlay_vm_image_path_in_container);
         let overlay_vm_image_path_in_container =
@@ -249,7 +249,7 @@ fn set_up_mounts(spec: &mut oci_spec::runtime::Spec, mounts: &mut Mounts) -> Res
                     }
 
                     path_in_container = PathBuf::from(format!(
-                        "/crun-qemu/mounts/virtiofs/{}",
+                        "/crun-vm/mounts/virtiofs/{}",
                         mounts.virtiofs.len()
                     ));
                     let path_in_guest = oci_mount.destination().clone();
@@ -266,7 +266,7 @@ fn set_up_mounts(spec: &mut oci_spec::runtime::Spec, mounts: &mut Mounts) -> Res
                         .any(|o| o == "ro" || o == "readonly");
 
                     path_in_container = PathBuf::from(format!(
-                        "crun-qemu/mounts/block/{}",
+                        "crun-vm/mounts/block/{}",
                         mounts.block_device.len()
                     ));
                     let path_in_guest = oci_mount.destination().clone();
@@ -323,7 +323,7 @@ fn set_up_devices(spec: &mut oci_spec::runtime::Spec, mounts: &mut Mounts) -> Re
         let mode = device.file_mode().unwrap();
 
         let path_in_container = PathBuf::from(format!(
-            "crun-qemu/mounts/block/{}",
+            "crun-vm/mounts/block/{}",
             mounts.block_device.len()
         ));
         let path_in_guest = device.path().clone();
@@ -364,7 +364,7 @@ fn set_up_blockdevs(
         );
 
         let path_in_container = PathBuf::from(format!(
-            "crun-qemu/mounts/block/{}",
+            "crun-vm/mounts/block/{}",
             mounts.block_device.len()
         ));
         let path_in_guest = blockdev.target.clone();
@@ -489,15 +489,15 @@ fn set_up_first_boot_config(
     config
         .apply_to_cloud_init_config(
             custom_options.cloud_init.as_ref(),
-            spec.root_path().join("crun-qemu/first-boot/cloud-init"),
-            spec.root_path().join("crun-qemu/first-boot/cloud-init.iso"),
+            spec.root_path().join("crun-vm/first-boot/cloud-init"),
+            spec.root_path().join("crun-vm/first-boot/cloud-init.iso"),
         )
         .context("failed to load cloud-init config")?;
 
     config
         .apply_to_ignition_config(
             custom_options.ignition.as_ref(),
-            spec.root_path().join("crun-qemu/first-boot/ignition.ign"),
+            spec.root_path().join("crun-vm/first-boot/ignition.ign"),
         )
         .context("failed to load ignition config")?;
 
