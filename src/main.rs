@@ -4,7 +4,7 @@ use std::env;
 use std::process;
 
 fn main() {
-    if let Err(e) = crun_qemu::main(env::args_os().skip(1)) {
+    if let Err(e) = crun_vm::main(env::args_os().skip(1)) {
         eprintln!("{:#}", e);
         process::exit(1);
     }
