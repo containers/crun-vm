@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::process::Command;
 
 use anyhow::{ensure, Result};
-
-use crate::util::PathExt;
 
 /// Run `crun`.
 ///
@@ -21,175 +19,180 @@ pub fn crun(args: impl IntoIterator<Item = impl AsRef<OsStr>>) -> Result<()> {
 }
 
 pub fn crun_create(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Create) -> Result<()> {
+    let mut a = Vec::<OsString>::new();
+
+    fn add(list: &mut Vec<OsString>, arg: impl AsRef<OsStr>) {
+        list.push(arg.as_ref().to_os_string());
+    }
+
     // build crun argument list
 
-    let mut arg_list = Vec::<String>::new();
-    let mut arg = |arg: &str| {
-        arg_list.push(arg.to_string());
-    };
-
     if global_args.debug {
-        arg("--debug");
+        add(&mut a, "--debug");
     }
 
     if let Some(path) = &global_args.log {
-        arg("--log");
-        arg(path.as_str());
+        add(&mut a, "--log");
+        add(&mut a, path);
     }
 
     if let Some(format) = &global_args.log_format {
-        arg("--log-format");
-        arg(format);
+        add(&mut a, "--log-format");
+        add(&mut a, format);
     }
 
     if args.no_pivot {
-        arg("--no-pivot");
+        add(&mut a, "--no-pivot");
     }
 
     if let Some(path) = &global_args.root {
-        arg("--root");
-        arg(path.as_str());
+        add(&mut a, "--root");
+        add(&mut a, path);
     }
 
     if global_args.systemd_cgroup {
-        arg("--systemd-cgroup");
+        add(&mut a, "--systemd-cgroup");
     }
 
-    arg("create");
+    add(&mut a, "create");
 
-    arg("--bundle");
-    arg(args.bundle.as_str());
+    add(&mut a, "--bundle");
+    add(&mut a, &args.bundle);
 
     if let Some(path) = &args.console_socket {
-        arg("--console-socket");
-        arg(path.as_str());
+        add(&mut a, "--console-socket");
+        add(&mut a, path);
     }
 
     if args.no_new_keyring {
-        arg("--no-new-keyring");
+        add(&mut a, "--no-new-keyring");
     }
 
-    arg("--preserve-fds");
-    arg(&args.preserve_fds.to_string());
+    add(&mut a, "--preserve-fds");
+    add(&mut a, args.preserve_fds.to_string());
 
     if let Some(path) = &args.pid_file {
-        arg("--pid-file");
-        arg(path.as_str());
+        add(&mut a, "--pid-file");
+        add(&mut a, path);
     }
 
-    arg(&args.container_id);
+    add(&mut a, &args.container_id);
 
     // run crun
 
-    crun(arg_list)
+    crun(a)
 }
 
 pub fn crun_exec(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Exec) -> Result<()> {
+    let mut a = Vec::<OsString>::new();
+
+    fn add(list: &mut Vec<OsString>, arg: impl AsRef<OsStr>) {
+        list.push(arg.as_ref().to_os_string());
+    }
+
     // build crun argument list
 
-    let mut arg_list = Vec::<String>::new();
-    let mut arg = |arg: &str| {
-        arg_list.push(arg.to_string());
-    };
-
     if global_args.debug {
-        arg("--debug");
+        add(&mut a, "--debug");
     }
 
     if let Some(path) = &global_args.log {
-        arg("--log");
-        arg(path.as_str());
+        add(&mut a, "--log");
+        add(&mut a, path);
     }
 
     if let Some(format) = &global_args.log_format {
-        arg("--log-format");
-        arg(format);
+        add(&mut a, "--log-format");
+        add(&mut a, format);
     }
 
     if let Some(path) = &global_args.root {
-        arg("--root");
-        arg(path.as_str());
+        add(&mut a, "--root");
+        add(&mut a, path);
     }
 
     if global_args.systemd_cgroup {
-        arg("--systemd-cgroup");
+        add(&mut a, "--systemd-cgroup");
     }
 
-    arg("exec");
+    add(&mut a, "exec");
 
     if let Some(profile) = &args.apparmor {
-        arg("--apparmor");
-        arg(profile);
+        add(&mut a, "--apparmor");
+        add(&mut a, profile);
     }
 
     if let Some(path) = &args.console_socket {
-        arg("--console-socket");
-        arg(path.as_str());
+        add(&mut a, "--console-socket");
+        add(&mut a, path);
     }
 
     if let Some(cwd) = &args.cwd {
-        arg("--cwd");
-        arg(cwd.as_str());
+        add(&mut a, "--cwd");
+        add(&mut a, cwd);
     }
 
     for cap in &args.cap {
-        arg("--cap");
-        arg(cap);
+        add(&mut a, "--cap");
+        add(&mut a, cap);
     }
 
     if args.detach {
-        arg("--detach");
+        add(&mut a, "--detach");
     }
 
     if let Some(path) = &args.cgroup {
-        arg("--cgroup");
-        arg(path);
+        add(&mut a, "--cgroup");
+        add(&mut a, path);
     }
 
     for (name, value) in &args.env {
-        arg("--env");
-        arg(&format!("{name}={value}"));
+        add(&mut a, "--env");
+        add(&mut a, format!("{name}={value}"));
     }
 
     if args.no_new_privs {
-        arg("--no-new-privs");
+        add(&mut a, "--no-new-privs");
     }
 
-    arg("--preserve-fds");
-    arg(&args.preserve_fds.to_string());
+    add(&mut a, "--preserve-fds");
+    add(&mut a, args.preserve_fds.to_string());
 
     if let Some(path) = &args.process {
-        arg("--process");
-        arg(path.as_str());
+        add(&mut a, "--process");
+        add(&mut a, path);
     }
 
     if let Some(label) = &args.process_label {
-        arg("--process-label");
-        arg(label);
+        add(&mut a, "--process-label");
+        add(&mut a, label);
     }
 
     if let Some(path) = &args.pid_file {
-        arg("--pid-file");
-        arg(path.as_str());
+        add(&mut a, "--pid-file");
+        add(&mut a, path);
     }
 
     if args.tty {
-        arg("--tty");
+        add(&mut a, "--tty");
     }
 
     if let Some((uid, gid)) = &args.user {
-        arg("--user");
-        arg(&match gid {
-            Some(gid) => format!("{uid}:{gid}"),
-            None => format!("{uid}"),
-        });
+        add(&mut a, "--user");
+        add(
+            &mut a,
+            match gid {
+                Some(gid) => format!("{uid}:{gid}"),
+                None => format!("{uid}"),
+            },
+        );
     }
 
-    arg(&args.container_id);
+    add(&mut a, &args.container_id);
 
-    arg_list.extend(args.command.iter().cloned());
+    a.extend(args.command.iter().map(Into::into));
 
     // run crun
 
-    crun(arg_list)
+    crun(a)
 }

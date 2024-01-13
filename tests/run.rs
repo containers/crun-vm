@@ -4,26 +4,19 @@
 
 use std::env;
 use std::io::{BufWriter, Write};
-use std::path::Path;
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
 
 use anyhow::{anyhow, Result};
+use camino::Utf8Path;
 use test_case::test_matrix;
 use uuid::Uuid;
 
 fn simple_test_case(image: &str, home_dir: &str) -> TestCase {
-    let exec_user = Path::new(home_dir)
-        .file_name()
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string();
-
     TestCase {
         run_args: vec![image.to_string(), "".to_string()],
-        exec_user,
+        exec_user: Utf8Path::new(home_dir).file_name().unwrap().to_string(),
         test_script: "".to_string(),
     }
 }
@@ -33,13 +26,6 @@ fn complex_test_case(
     home_dir: &str,
     cloud_init_and_ignition_prefix: &str,
 ) -> TestCase {
-    let exec_user = Path::new(home_dir)
-        .file_name()
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string();
-
     let cloud_init_and_ignition_prefix = match cloud_init_and_ignition_prefix {
         "" => "".to_string(),
         prefix => format!("{prefix}/"),
@@ -55,7 +41,7 @@ fn complex_test_case(
             format!("--cloud-init={cloud_init_and_ignition_prefix}examples/cloud-init/config"),
             format!("--ignition={cloud_init_and_ignition_prefix}examples/ignition/config.ign"),
         ],
-        exec_user,
+        exec_user: Utf8Path::new(home_dir).file_name().unwrap().to_string(),
         test_script: format!(
             "
             mount -l | grep '^virtiofs-0 on {home_dir}/util type virtiofs'

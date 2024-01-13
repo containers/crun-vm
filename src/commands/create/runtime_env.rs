@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use std::fs;
-use std::path::Path;
 
 use anyhow::Result;
+use camino::Utf8Path;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RuntimeEnv {
@@ -15,7 +15,7 @@ pub enum RuntimeEnv {
 impl RuntimeEnv {
     pub fn current(
         spec: &oci_spec::runtime::Spec,
-        original_root_path: impl AsRef<Path>,
+        original_root_path: impl AsRef<Utf8Path>,
     ) -> Result<RuntimeEnv> {
         let has_kubernetes_secrets_dir = spec.mounts().iter().flatten().any(|m| {
             m.destination()
@@ -26,7 +26,7 @@ impl RuntimeEnv {
             .mounts()
             .iter()
             .flatten()
-            .filter(|m| m.destination() == Path::new("/etc/hosts"))
+            .filter(|m| m.destination() == Utf8Path::new("/etc/hosts"))
             .flat_map(|m| m.source())
             .next()
             .map(fs::read_to_string)

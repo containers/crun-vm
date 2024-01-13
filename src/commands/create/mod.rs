@@ -7,10 +7,11 @@ mod runtime_env;
 
 use std::fs::{self, Permissions};
 use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 use anyhow::{bail, ensure, Context, Result};
+use camino::{Utf8Path, Utf8PathBuf};
 use nix::sys::stat::{major, makedev, minor, mknod, Mode, SFlag};
 
 use crate::commands::create::custom_opts::CustomOptions;
@@ -20,21 +21,22 @@ use crate::commands::create::runtime_env::RuntimeEnv;
 use crate::crun::crun_create;
 use crate::util::{
     bind_mount_dir_with_different_context, bind_mount_file, create_overlay_vm_image,
-    find_single_file_in_dirs, set_file_context, PathExt, SpecExt, VmImageInfo,
+    find_single_file_in_dirs, set_file_context, SpecExt, VmImageInfo,
 };
 
 pub fn create(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Create) -> Result<()> {
-    let config_path = args.bundle.join("config.json");
+    let bundle_path: &Utf8Path = args.bundle.as_path().try_into()?;
+    let config_path = bundle_path.join("config.json");
 
     let mut spec = oci_spec::runtime::Spec::load(&config_path)?;
-    let original_root_path = spec.root_path().clone();
+    let original_root_path = spec.root_path()?.to_path_buf();
 
     let runtime_env = RuntimeEnv::current(&spec, &original_root_path)?;
     let custom_options = CustomOptions::from_spec(&spec, runtime_env)?;
 
-    set_up_container_root(&mut spec, &args.bundle, &custom_options)?;
+    set_up_container_root(&mut spec, bundle_path, &custom_options)?;
     let base_vm_image_info =
-        set_up_vm_image(&spec, &args.bundle, &original_root_path, &custom_options)?;
+        set_up_vm_image(&spec, bundle_path, &original_root_path, &custom_options)?;
 
     let mut mounts = Mounts::default();
     set_up_mounts(&mut spec, &mut mounts)?;
@@ -50,7 +52,7 @@ pub fn create(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Create) -
     adjust_container_resources(&mut spec);
 
     spec.save(&config_path)?;
-    spec.save(spec.root_path().join("crun-vm/config.json"))?; // to aid debugging
+    spec.save(spec.root_path()?.join("crun-vm/config.json"))?; // to aid debugging
 
     crun_create(global_args, args)?; // actually create container
 
@@ -59,7 +61,7 @@ pub fn create(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Create) -
 
 fn set_up_container_root(
     spec: &mut oci_spec::runtime::Spec,
-    bundle_path: &Path,
+    bundle_path: &Utf8Path,
     custom_options: &CustomOptions,
 ) -> Result<()> {
     // create root directory
@@ -72,20 +74,20 @@ fn set_up_container_root(
             .unwrap(),
     ));
 
-    fs::create_dir_all(spec.root_path())?;
+    fs::create_dir_all(spec.root_path()?)?;
 
     if let Some(context) = spec.mount_label() {
         // the directory we're using as the root for the container is not the one that podman
         // prepared for us, so we need to set its context ourselves to prevent SELinux from getting
         // angry at us
-        set_file_context(spec.root_path(), context)?;
+        set_file_context(spec.root_path()?, context)?;
     }
 
     // configure container entrypoint
 
     const ENTRYPOINT_BYTES: &[u8] = include_bytes!("entrypoint.sh");
 
-    let entrypoint_path: PathBuf = spec.root_path().join("crun-vm/entrypoint.sh");
+    let entrypoint_path: Utf8PathBuf = spec.root_path()?.join("crun-vm/entrypoint.sh");
     fs::create_dir_all(entrypoint_path.parent().unwrap())?;
 
     fs::write(&entrypoint_path, ENTRYPOINT_BYTES)?;
@@ -109,8 +111,8 @@ fn set_up_container_root(
 
 fn set_up_vm_image(
     spec: &oci_spec::runtime::Spec,
-    bundle_path: &Path,
-    original_root_path: &Path,
+    bundle_path: &Utf8Path,
+    original_root_path: &Utf8Path,
     custom_options: &CustomOptions,
 ) -> Result<VmImageInfo> {
     // where inside the container to look for the VM image
@@ -127,15 +129,16 @@ fn set_up_vm_image(
     // mount user-provided VM image file into container
 
     let mirror_vm_image_path_in_container =
-        Path::new("crun-vm/image").join(vm_image_path_in_host.file_name().unwrap());
-    let mirror_vm_image_path_in_host = spec.root_path().join(&mirror_vm_image_path_in_container);
-    let mirror_vm_image_path_in_container = Path::new("/").join(mirror_vm_image_path_in_container);
+        Utf8Path::new("crun-vm/image").join(vm_image_path_in_host.file_name().unwrap());
+    let mirror_vm_image_path_in_host = spec.root_path()?.join(&mirror_vm_image_path_in_container);
+    let mirror_vm_image_path_in_container =
+        Utf8Path::new("/").join(mirror_vm_image_path_in_container);
 
     let private_dir = if custom_options.persistent {
         let vm_image_dir_path = vm_image_path_in_host.parent().unwrap();
         let vm_image_dir_name = vm_image_dir_path.file_name().unwrap();
 
-        let overlay_private_dir_name = format!(".crun-vm.{}.tmp", vm_image_dir_name.as_str());
+        let overlay_private_dir_name = format!(".crun-vm.{}.tmp", vm_image_dir_name);
         let overlay_private_dir_path = vm_image_dir_path
             .parent()
             .unwrap()
@@ -174,11 +177,11 @@ fn set_up_vm_image(
         // ensure that we get copy-on-write and page cache sharing even when the underlying file
         // system doesn't support reflinks, we create a qcow2 overlay and use that as the image.
 
-        let overlay_vm_image_path_in_container = PathBuf::from("crun-vm/image-overlay.qcow2");
+        let overlay_vm_image_path_in_container = Utf8PathBuf::from("crun-vm/image-overlay.qcow2");
         let overlay_vm_image_path_in_host =
-            spec.root_path().join(&overlay_vm_image_path_in_container);
+            spec.root_path()?.join(&overlay_vm_image_path_in_container);
         let overlay_vm_image_path_in_container =
-            Path::new("/").join(overlay_vm_image_path_in_container);
+            Utf8Path::new("/").join(overlay_vm_image_path_in_container);
 
         vm_image_info.path = mirror_vm_image_path_in_container;
         create_overlay_vm_image(&overlay_vm_image_path_in_host, &vm_image_info)?;
@@ -199,18 +202,18 @@ struct Mounts {
 struct BlockDeviceMount {
     format: String,
     is_regular_file: bool,
-    path_in_container: PathBuf,
-    path_in_guest: PathBuf,
+    path_in_container: Utf8PathBuf,
+    path_in_guest: Utf8PathBuf,
     readonly: bool,
 }
 
 struct VirtiofsMount {
-    path_in_container: PathBuf,
-    path_in_guest: PathBuf,
+    path_in_container: Utf8PathBuf,
+    path_in_guest: Utf8PathBuf,
 }
 
 struct TmpfsMount {
-    path_in_guest: PathBuf,
+    path_in_guest: Utf8PathBuf,
 }
 
 fn set_up_mounts(spec: &mut oci_spec::runtime::Spec, mounts: &mut Mounts) -> Result<()> {
@@ -230,7 +233,7 @@ fn set_up_mounts(spec: &mut oci_spec::runtime::Spec, mounts: &mut Mounts) -> Res
     for oci_mount in spec.mounts().iter().flatten() {
         if TARGETS_TO_IGNORE
             .iter()
-            .any(|path| oci_mount.destination() == Path::new(path))
+            .any(|path| oci_mount.destination() == Utf8Path::new(path))
         {
             new_oci_mounts.push(oci_mount.clone());
             continue;
@@ -248,11 +251,11 @@ fn set_up_mounts(spec: &mut oci_spec::runtime::Spec, mounts: &mut Mounts) -> Res
                         continue;
                     }
 
-                    path_in_container = PathBuf::from(format!(
+                    path_in_container = Utf8PathBuf::from(format!(
                         "/crun-vm/mounts/virtiofs/{}",
                         mounts.virtiofs.len()
                     ));
-                    let path_in_guest = oci_mount.destination().clone();
+                    let path_in_guest = oci_mount.destination().clone().try_into()?;
 
                     mounts.virtiofs.push(VirtiofsMount {
                         path_in_container: path_in_container.clone(),
@@ -265,11 +268,11 @@ fn set_up_mounts(spec: &mut oci_spec::runtime::Spec, mounts: &mut Mounts) -> Res
                         .flatten()
                         .any(|o| o == "ro" || o == "readonly");
 
-                    path_in_container = PathBuf::from(format!(
+                    path_in_container = Utf8PathBuf::from(format!(
                         "crun-vm/mounts/block/{}",
                         mounts.block_device.len()
                     ));
-                    let path_in_guest = oci_mount.destination().clone();
+                    let path_in_guest = oci_mount.destination().clone().try_into()?;
 
                     mounts.block_device.push(BlockDeviceMount {
                         format: "raw".to_string(),
@@ -284,7 +287,7 @@ fn set_up_mounts(spec: &mut oci_spec::runtime::Spec, mounts: &mut Mounts) -> Res
 
                 // redirect the mount to a path in the container that we control
                 let mut new_mount = oci_mount.clone();
-                new_mount.set_destination(path_in_container);
+                new_mount.set_destination(path_in_container.as_std_path().to_path_buf());
                 new_oci_mounts.push(new_mount);
             }
             Some("tmpfs") => {
@@ -295,7 +298,7 @@ fn set_up_mounts(spec: &mut oci_spec::runtime::Spec, mounts: &mut Mounts) -> Res
 
                 // don't actually mount it in the container
 
-                let path_in_guest = oci_mount.destination().clone();
+                let path_in_guest = oci_mount.destination().clone().try_into()?;
                 mounts.tmpfs.push(TmpfsMount { path_in_guest });
             }
             _ => {
@@ -322,16 +325,16 @@ fn set_up_devices(spec: &mut oci_spec::runtime::Spec, mounts: &mut Mounts) -> Re
         let minor: u64 = device.minor().try_into().unwrap();
         let mode = device.file_mode().unwrap();
 
-        let path_in_container = PathBuf::from(format!(
+        let path_in_container = Utf8PathBuf::from(format!(
             "crun-vm/mounts/block/{}",
             mounts.block_device.len()
         ));
-        let path_in_guest = device.path().clone();
+        let path_in_guest = device.path().clone().try_into()?;
 
-        fs::create_dir_all(spec.root_path().join(&path_in_container).parent().unwrap())?;
+        fs::create_dir_all(spec.root_path()?.join(&path_in_container).parent().unwrap())?;
 
         mknod(
-            &spec.root_path().join(&path_in_container),
+            spec.root_path()?.join(&path_in_container).as_std_path(),
             SFlag::S_IFBLK,
             Mode::from_bits_retain(mode),
             makedev(major, minor),
@@ -363,13 +366,13 @@ fn set_up_blockdevs(
             "blockdev source must be a regular file or a block device"
         );
 
-        let path_in_container = PathBuf::from(format!(
+        let path_in_container = Utf8PathBuf::from(format!(
             "crun-vm/mounts/block/{}",
             mounts.block_device.len()
         ));
         let path_in_guest = blockdev.target.clone();
 
-        fs::create_dir_all(spec.root_path().join(&path_in_container).parent().unwrap())?;
+        fs::create_dir_all(spec.root_path()?.join(&path_in_container).parent().unwrap())?;
 
         // mount from the host to the container
         spec.mounts_push(
@@ -425,9 +428,9 @@ fn set_up_extra_container_mounts_and_devices(spec: &mut oci_spec::runtime::Spec)
         Ok(())
     }
 
-    fs::create_dir_all(spec.root_path().join("etc"))?;
-    fs::copy("/etc/passwd", spec.root_path().join("etc/passwd"))?;
-    fs::copy("/etc/group", spec.root_path().join("etc/group"))?;
+    fs::create_dir_all(spec.root_path()?.join("etc"))?;
+    fs::copy("/etc/passwd", spec.root_path()?.join("etc/passwd"))?;
+    fs::copy("/etc/group", spec.root_path()?.join("etc/group"))?;
 
     for path in ["/bin", "/dev/log", "/etc/pam.d", "/lib", "/lib64", "/usr"] {
         add_bind_mount(spec, path);
@@ -489,15 +492,15 @@ fn set_up_first_boot_config(
     config
         .apply_to_cloud_init_config(
             custom_options.cloud_init.as_ref(),
-            spec.root_path().join("crun-vm/first-boot/cloud-init"),
-            spec.root_path().join("crun-vm/first-boot/cloud-init.iso"),
+            spec.root_path()?.join("crun-vm/first-boot/cloud-init"),
+            spec.root_path()?.join("crun-vm/first-boot/cloud-init.iso"),
         )
         .context("failed to load cloud-init config")?;
 
     config
         .apply_to_ignition_config(
             custom_options.ignition.as_ref(),
-            spec.root_path().join("crun-vm/first-boot/ignition.ign"),
+            spec.root_path()?.join("crun-vm/first-boot/ignition.ign"),
         )
         .context("failed to load ignition config")?;
 
@@ -509,7 +512,7 @@ fn set_up_first_boot_config(
 /// This first attempts to use the current user's key pair, in case the VM does not support
 /// cloud-init but the user injected their public key into it themselves.
 fn get_container_ssh_key_pair(spec: &oci_spec::runtime::Spec, env: RuntimeEnv) -> Result<String> {
-    let ssh_path = spec.root_path().join("root/.ssh");
+    let ssh_path = spec.root_path()?.join("root/.ssh");
     fs::create_dir_all(&ssh_path)?;
 
     let try_copy_user_key_pair = || -> Result<bool> {

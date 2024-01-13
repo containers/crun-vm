@@ -1,21 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 use std::iter;
-use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use anyhow::{anyhow, ensure, Result};
+use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
 use lazy_static::lazy_static;
 use regex::Regex;
 
 use crate::commands::create::runtime_env::RuntimeEnv;
-use crate::util::PathExt;
 
 #[derive(Clone, Debug)]
 pub struct Blockdev {
-    pub source: PathBuf,
-    pub target: PathBuf,
+    pub source: Utf8PathBuf,
+    pub target: Utf8PathBuf,
     pub format: String,
 }
 
@@ -33,8 +32,8 @@ impl FromStr for Blockdev {
             .ok_or_else(|| anyhow!("invalid --blockdev option"))?;
 
         let blockdev = Blockdev {
-            source: PathBuf::from(&captures[1]),
-            target: PathBuf::from(&captures[2]),
+            source: Utf8PathBuf::from(&captures[1]),
+            target: Utf8PathBuf::from(&captures[2]),
             format: captures[3].to_string(),
         };
 
@@ -51,7 +50,7 @@ pub struct VfioPciAddress {
 }
 
 impl VfioPciAddress {
-    fn from_path(path: impl AsRef<Path>) -> Result<Self> {
+    fn from_path(path: impl AsRef<Utf8Path>) -> Result<Self> {
         lazy_static! {
             static ref PATTERN: Regex = {
                 let h = r"[0-9a-fA-F]".to_string();
@@ -66,7 +65,7 @@ impl VfioPciAddress {
             };
         }
 
-        let path = path.as_ref().canonicalize()?;
+        let path = path.as_ref().canonicalize_utf8()?;
 
         let capture = PATTERN
             .captures(path.as_str())
@@ -87,7 +86,7 @@ impl VfioPciAddress {
 pub struct VfioPciMdevUuid(pub String);
 
 impl VfioPciMdevUuid {
-    fn from_path(path: impl AsRef<Path>) -> Result<Self> {
+    fn from_path(path: impl AsRef<Utf8Path>) -> Result<Self> {
         lazy_static! {
             static ref PATTERN: Regex = {
                 let h = r"[0-9a-zA-Z]".to_string();
@@ -101,7 +100,7 @@ impl VfioPciMdevUuid {
             };
         }
 
-        let path = path.as_ref().canonicalize()?;
+        let path = path.as_ref().canonicalize_utf8()?;
 
         let capture = PATTERN
             .captures(path.as_str())
@@ -115,12 +114,12 @@ impl VfioPciMdevUuid {
 pub struct CustomOptions {
     pub blockdev: Vec<Blockdev>,
     pub persistent: bool,
-    pub cloud_init: Option<PathBuf>,
-    pub ignition: Option<PathBuf>,
+    pub cloud_init: Option<Utf8PathBuf>,
+    pub ignition: Option<Utf8PathBuf>,
     pub vfio_pci: Vec<VfioPciAddress>,
     pub vfio_pci_mdev: Vec<VfioPciMdevUuid>,
     pub password: Option<String>,
-    pub merge_libvirt_xml: Vec<PathBuf>,
+    pub merge_libvirt_xml: Vec<Utf8PathBuf>,
     pub print_libvirt_xml: bool,
 }
 
@@ -159,22 +158,22 @@ struct CustomOptionsRaw {
     persistent: bool,
 
     #[clap(long)]
-    cloud_init: Option<PathBuf>,
+    cloud_init: Option<Utf8PathBuf>,
 
     #[clap(long)]
-    ignition: Option<PathBuf>,
+    ignition: Option<Utf8PathBuf>,
 
     #[clap(long)]
-    vfio_pci: Vec<PathBuf>,
+    vfio_pci: Vec<Utf8PathBuf>,
 
     #[clap(long)]
-    vfio_pci_mdev: Vec<PathBuf>,
+    vfio_pci_mdev: Vec<Utf8PathBuf>,
 
     #[clap(long)]
     password: Option<String>,
 
     #[clap(long)]
-    merge_libvirt_xml: Vec<PathBuf>,
+    merge_libvirt_xml: Vec<Utf8PathBuf>,
 
     #[clap(long)]
     print_libvirt_xml: bool,
@@ -198,14 +197,14 @@ impl CustomOptions {
             iter::once(&"podman run [<podman-opts>] <image>".to_string()).chain(args),
         );
 
-        fn all_are_absolute(iter: impl IntoIterator<Item = impl AsRef<Path>>) -> bool {
+        fn all_are_absolute(iter: impl IntoIterator<Item = impl AsRef<Utf8Path>>) -> bool {
             iter.into_iter().all(|p| p.as_ref().is_absolute())
         }
 
         fn path_in_container_into_path_in_host(
             spec: &oci_spec::runtime::Spec,
-            path: impl AsRef<Path>,
-        ) -> Result<PathBuf> {
+            path: impl AsRef<Utf8Path>,
+        ) -> Result<Utf8PathBuf> {
             let mount = spec
                 .mounts()
                 .iter()
@@ -213,12 +212,14 @@ impl CustomOptions {
                 .filter(|m| m.source().is_some())
                 .filter(|m| path.as_ref().starts_with(m.destination()))
                 .last()
-                .ok_or_else(|| anyhow!("can't find {}", path.as_str()))?;
+                .ok_or_else(|| anyhow!("can't find {}", path.as_ref()))?;
+
+            let mount_source: &Utf8Path = mount.source().as_deref().unwrap().try_into()?;
 
             let relative_path = path.as_ref().strip_prefix(mount.destination()).unwrap();
-            let path_in_host = mount.source().as_ref().unwrap().join(relative_path);
+            let path_in_host = mount_source.join(relative_path);
 
-            ensure!(path_in_host.try_exists()?, "can't find {}", path.as_str());
+            ensure!(path_in_host.try_exists()?, "can't find {}", path.as_ref());
 
             Ok(path_in_host)
         }

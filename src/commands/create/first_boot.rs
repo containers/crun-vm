@@ -2,13 +2,12 @@
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter, Write};
-use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{bail, ensure, Context, Result};
+use camino::{Utf8Path, Utf8PathBuf};
 
 use crate::commands::create::Mounts;
-use crate::util::PathExt;
 
 pub struct FirstBootConfig<'a> {
     pub hostname: Option<&'a str>,
@@ -21,11 +20,11 @@ impl FirstBootConfig<'_> {
     /// Returns `true` if a cloud-init config should be passed to the VM.
     pub fn apply_to_cloud_init_config(
         &self,
-        in_config_dir_path: Option<impl AsRef<Path>>,
-        out_config_dir_path: impl AsRef<Path>,
-        out_config_iso_file_path: impl AsRef<Path>,
+        in_config_dir_path: Option<impl AsRef<Utf8Path>>,
+        out_config_dir_path: impl AsRef<Utf8Path>,
+        out_config_iso_file_path: impl AsRef<Utf8Path>,
     ) -> Result<()> {
-        fs::create_dir_all(&out_config_dir_path)?;
+        fs::create_dir_all(out_config_dir_path.as_ref())?;
 
         // create copy of config
 
@@ -34,11 +33,7 @@ impl FirstBootConfig<'_> {
         if let Some(in_config_dir_path) = &in_config_dir_path {
             for file in ["meta-data", "user-data"] {
                 let path = in_config_dir_path.as_ref().join(file);
-                ensure!(
-                    path.is_file(),
-                    "missing mandatory config file {}",
-                    path.as_str()
-                );
+                ensure!(path.is_file(), "missing mandatory config file {}", path);
             }
 
             for file in ["meta-data", "user-data", "vendor-data"] {
@@ -104,9 +99,8 @@ impl FirstBootConfig<'_> {
                 _ => bail!("invalid user-data file"),
             };
 
-            let mut add_mount = |typ: &str, tag: &str, path_in_guest: &Path| {
-                let path_in_guest = path_in_guest.as_str();
-                mounts.push(vec![&tag, path_in_guest, typ, "defaults", "0", "0"].into());
+            let mut add_mount = |typ: &str, tag: &str, path_in_guest: &Utf8Path| {
+                mounts.push(vec![&tag, path_in_guest.as_str(), typ, "defaults", "0", "0"].into());
             };
 
             for (i, mount) in self.mounts.virtiofs.iter().enumerate() {
@@ -224,18 +218,18 @@ impl FirstBootConfig<'_> {
 
     pub fn apply_to_ignition_config(
         &self,
-        in_config_file_path: Option<impl AsRef<Path>>,
-        out_config_file_path: impl AsRef<Path>,
+        in_config_file_path: Option<impl AsRef<Utf8Path>>,
+        out_config_file_path: impl AsRef<Utf8Path>,
     ) -> Result<()> {
         // load user config, if any
 
         let mut user_data: serde_json::Value = if let Some(user_path) = &in_config_file_path {
-            fs::copy(user_path, &out_config_file_path)?;
-            serde_json::from_reader(File::open(user_path).map(BufReader::new)?)
+            fs::copy(user_path.as_ref(), out_config_file_path.as_ref())?;
+            serde_json::from_reader(File::open(user_path.as_ref()).map(BufReader::new)?)
                 .context("invalid config file")?
         } else {
             fs::write(
-                &out_config_file_path,
+                out_config_file_path.as_ref(),
                 "{ \"ignition\": { \"version\": \"3.0.0\" } }\n",
             )?;
             serde_json::json!({
@@ -384,13 +378,11 @@ impl FirstBootConfig<'_> {
             _ => bail!("invalid config file"),
         };
 
-        let mut add_mount = |typ: &str, tag: &str, path_in_guest: &Path| {
-            let path_in_guest = path_in_guest.as_str();
-
+        let mut add_mount = |typ: &str, tag: &str, path_in_guest: &Utf8Path| {
             // systemd insists on this unit file name format
             let systemd_unit_file_name = format!(
                 "{}.mount",
-                path_in_guest.trim_matches('/').replace('/', "-")
+                path_in_guest.as_str().trim_matches('/').replace('/', "-")
             );
 
             let systemd_unit = format!(
@@ -423,19 +415,19 @@ impl FirstBootConfig<'_> {
         // generate file
 
         serde_json::to_writer(
-            File::create(&out_config_file_path).map(BufWriter::new)?,
+            File::create(out_config_file_path.as_ref()).map(BufWriter::new)?,
             &user_data,
         )?;
 
         Ok(())
     }
 
-    fn get_block_device_symlinks(&self) -> Vec<(&Path, PathBuf)> {
+    fn get_block_device_symlinks(&self) -> Vec<(&Utf8Path, Utf8PathBuf)> {
         let mut symlinks = Vec::new();
 
         for (i, dev) in self.mounts.block_device.iter().enumerate() {
-            if dev.path_in_guest.parent() != Some(Path::new("/dev")) {
-                let target = PathBuf::from(format!("/dev/disk/by-id/virtio-crun-vm-block-{i}"));
+            if dev.path_in_guest.parent() != Some(Utf8Path::new("/dev")) {
+                let target = Utf8PathBuf::from(format!("/dev/disk/by-id/virtio-crun-vm-block-{i}"));
                 symlinks.push((dev.path_in_guest.as_path(), target));
             }
         }
@@ -447,11 +439,11 @@ impl FirstBootConfig<'_> {
         let mut rules = String::new();
 
         for (i, dev) in self.mounts.block_device.iter().enumerate() {
-            if dev.path_in_guest.parent() == Some(Path::new("/dev")) {
+            if dev.path_in_guest.parent() == Some(Utf8Path::new("/dev")) {
                 rules.push_str(&format!(
                     "ENV{{ID_SERIAL}}==\"crun-vm-block-{}\", SYMLINK+=\"{}\"\n",
                     i,
-                    dev.path_in_guest.file_name().unwrap().as_str(),
+                    dev.path_in_guest.file_name().unwrap(),
                 ));
             }
         }

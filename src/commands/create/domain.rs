@@ -2,14 +2,14 @@
 
 use std::fs::File;
 use std::io::{BufReader, Write};
-use std::path::Path;
 
 use anyhow::{ensure, Result};
+use camino::Utf8Path;
 use xml::writer::XmlEvent;
 
 use crate::commands::create::custom_opts::{CustomOptions, VfioPciMdevUuid};
 use crate::commands::create::Mounts;
-use crate::util::{PathExt, SpecExt, VmImageInfo};
+use crate::util::{SpecExt, VmImageInfo};
 
 pub fn set_up_libvirt_domain_xml(
     spec: &oci_spec::runtime::Spec,
@@ -17,7 +17,7 @@ pub fn set_up_libvirt_domain_xml(
     mounts: &Mounts,
     custom_options: &CustomOptions,
 ) -> Result<()> {
-    let path = spec.root_path().join("crun-vm/domain.xml");
+    let path = spec.root_path()?.join("crun-vm/domain.xml");
 
     generate(&path, spec, vm_image_info, mounts, custom_options)?;
     merge_overlays(&path, &custom_options.merge_libvirt_xml)?;
@@ -26,7 +26,7 @@ pub fn set_up_libvirt_domain_xml(
 }
 
 fn generate(
-    path: impl AsRef<Path>,
+    path: impl AsRef<Utf8Path>,
     spec: &oci_spec::runtime::Spec,
     vm_image_info: &VmImageInfo,
     mounts: &Mounts,
@@ -34,7 +34,7 @@ fn generate(
 ) -> Result<()> {
     let mut w = xml::EmitterConfig::new()
         .perform_indent(true)
-        .create_writer(File::create(path)?);
+        .create_writer(File::create(path.as_ref())?);
 
     s(&mut w, "domain", &[("type", "kvm")], |w| {
         st(w, "name", &[], "domain")?;
@@ -206,17 +206,20 @@ fn generate(
     Ok(())
 }
 
-fn merge_overlays(base_path: impl AsRef<Path>, overlay_paths: &[impl AsRef<Path>]) -> Result<()> {
-    fn load(path: impl AsRef<Path>) -> Result<minidom::Element> {
-        let reader = BufReader::new(File::open(path)?);
+fn merge_overlays(
+    base_path: impl AsRef<Utf8Path>,
+    overlay_paths: &[impl AsRef<Utf8Path>],
+) -> Result<()> {
+    fn load(path: impl AsRef<Utf8Path>) -> Result<minidom::Element> {
+        let reader = BufReader::new(File::open(path.as_ref())?);
         Ok(minidom::Element::from_reader_with_prefixes(
             reader,
             "".to_string(),
         )?)
     }
 
-    fn save(path: impl AsRef<Path>, root: &minidom::Element) -> Result<()> {
-        let mut writer = File::create(path)?;
+    fn save(path: impl AsRef<Utf8Path>, root: &minidom::Element) -> Result<()> {
+        let mut writer = File::create(path.as_ref())?;
         root.write_to_decl(&mut writer)?;
         writer.write_all(b"\n")?;
         writer.flush()?;

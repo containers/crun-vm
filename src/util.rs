@@ -5,28 +5,14 @@ use std::fs::{self, OpenOptions, Permissions};
 use std::io;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use anyhow::{anyhow, bail, ensure, Result};
+use camino::{Utf8Path, Utf8PathBuf};
 use nix::mount::MsFlags;
 use serde::Deserialize;
 
-pub trait PathExt {
-    fn as_str(&self) -> &str;
-
-    fn as_string(&self) -> String {
-        self.as_str().to_string()
-    }
-}
-
-impl<P: AsRef<Path>> PathExt for P {
-    fn as_str(&self) -> &str {
-        self.as_ref().to_str().expect("path is utf-8")
-    }
-}
-
-pub fn set_file_context(path: impl AsRef<Path>, context: &str) -> Result<()> {
+pub fn set_file_context(path: impl AsRef<Utf8Path>, context: &str) -> Result<()> {
     extern "C" {
         fn setfilecon(path: *const c_char, con: *const c_char) -> i32;
     }
@@ -41,7 +27,7 @@ pub fn set_file_context(path: impl AsRef<Path>, context: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn bind_mount_file(from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<()> {
+pub fn bind_mount_file(from: impl AsRef<Utf8Path>, to: impl AsRef<Utf8Path>) -> Result<()> {
     // ensure target exists
 
     if let Some(parent) = to.as_ref().parent() {
@@ -56,16 +42,16 @@ pub fn bind_mount_file(from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<(
     // bind mount file
 
     if let Err(e) = nix::mount::mount(
-        Some(from.as_ref()),
-        to.as_ref(),
+        Some(from.as_ref().as_std_path()),
+        to.as_ref().as_std_path(),
         Option::<&str>::None,
         MsFlags::MS_BIND,
         Option::<&str>::None,
     ) {
         bail!(
             "mount({:?}, {:?}, NULL, MS_BIND, NULL) failed: {}",
-            from.as_str(),
-            to.as_str(),
+            from.as_ref(),
+            to.as_ref(),
             e
         );
     }
@@ -82,11 +68,11 @@ pub fn bind_mount_file(from: impl AsRef<Path>, to: impl AsRef<Path>) -> Result<(
 ///
 /// TODO: Is this a neat relabeling trick or simply a bad hack?
 pub fn bind_mount_dir_with_different_context(
-    from: impl AsRef<Path>,
-    to: impl AsRef<Path>,
+    from: impl AsRef<Utf8Path>,
+    to: impl AsRef<Utf8Path>,
     context: Option<&str>,
     propagate_changes: bool,
-    private_dir: impl AsRef<Path>,
+    private_dir: impl AsRef<Utf8Path>,
 ) -> Result<()> {
     let layer_dir = private_dir.as_ref().join("layer");
     let work_dir = private_dir.as_ref().join("work");
@@ -95,8 +81,11 @@ pub fn bind_mount_dir_with_different_context(
     fs::create_dir_all(&work_dir)?;
     fs::create_dir_all(to.as_ref())?;
 
-    fn escape_path(mount_option: &str) -> String {
-        mount_option.replace('\\', "\\\\").replace(',', "\\,")
+    fn escape_path(mount_option: &Utf8Path) -> String {
+        mount_option
+            .as_str()
+            .replace('\\', "\\\\")
+            .replace(',', "\\,")
     }
 
     fn escape_context(mount_option: &str) -> String {
@@ -111,9 +100,9 @@ pub fn bind_mount_dir_with_different_context(
 
     let mut options = format!(
         "lowerdir={},upperdir={},workdir={}",
-        escape_path(lower_dir.as_str()),
-        escape_path(upper_dir.as_str()),
-        escape_path(work_dir.as_str()),
+        escape_path(lower_dir),
+        escape_path(upper_dir),
+        escape_path(&work_dir),
     );
 
     if let Some(context) = context {
@@ -122,14 +111,14 @@ pub fn bind_mount_dir_with_different_context(
 
     if let Err(e) = nix::mount::mount(
         Some("overlay"),
-        to.as_ref(),
+        to.as_ref().as_std_path(),
         Some("overlay"),
         MsFlags::empty(),
         Some(options.as_str()),
     ) {
         bail!(
             "mount(\"overlay\", {:?}, \"overlay\", 0, {:?}) failed: {}",
-            to.as_str(),
+            to.as_ref(),
             options,
             e,
         );
@@ -143,7 +132,7 @@ pub fn bind_mount_dir_with_different_context(
 }
 
 pub trait SpecExt {
-    fn root_path(&self) -> &PathBuf;
+    fn root_path(&self) -> Result<&Utf8Path>;
     fn mount_label(&self) -> Option<&str>;
     fn linux_devices(&self) -> &[oci_spec::runtime::LinuxDevice];
 
@@ -157,8 +146,9 @@ pub trait SpecExt {
 }
 
 impl SpecExt for oci_spec::runtime::Spec {
-    fn root_path(&self) -> &PathBuf {
-        self.root().as_ref().unwrap().path()
+    fn root_path(&self) -> Result<&Utf8Path> {
+        let path = self.root().as_ref().unwrap().path().as_path().try_into()?;
+        Ok(path)
     }
 
     fn mount_label(&self) -> Option<&str> {
@@ -250,10 +240,10 @@ impl SpecExt for oci_spec::runtime::Spec {
 }
 
 pub fn find_single_file_in_dirs(
-    dir_paths: impl IntoIterator<Item = impl AsRef<Path>>,
-    ignore_files: &[impl AsRef<Path>],
-) -> Result<PathBuf> {
-    let mut candidate: Option<PathBuf> = None;
+    dir_paths: impl IntoIterator<Item = impl AsRef<Utf8Path>>,
+    ignore_files: &[impl AsRef<Utf8Path>],
+) -> Result<Utf8PathBuf> {
+    let mut candidate: Option<Utf8PathBuf> = None;
 
     for dir_path in dir_paths {
         let dir_path = dir_path.as_ref();
@@ -266,7 +256,7 @@ pub fn find_single_file_in_dirs(
                     continue; // we only care about regular files
                 }
 
-                let path = e.path();
+                let path: Utf8PathBuf = e.path().try_into()?;
 
                 if ignore_files.iter().any(|f| path == f.as_ref()) {
                     continue; // file is in `ignore_files`
@@ -285,7 +275,7 @@ pub fn find_single_file_in_dirs(
 #[derive(Deserialize)]
 pub struct VmImageInfo {
     #[serde(skip)]
-    pub path: PathBuf,
+    pub path: Utf8PathBuf,
 
     #[serde(rename = "virtual-size")]
     pub size: u64,
@@ -294,7 +284,7 @@ pub struct VmImageInfo {
 }
 
 impl VmImageInfo {
-    pub fn of(vm_image_path: impl AsRef<Path>) -> Result<VmImageInfo> {
+    pub fn of(vm_image_path: impl AsRef<Utf8Path>) -> Result<VmImageInfo> {
         let vm_image_path = vm_image_path.as_ref().to_path_buf();
 
         let output = Command::new("qemu-img")
@@ -314,7 +304,7 @@ impl VmImageInfo {
 }
 
 pub fn create_overlay_vm_image(
-    overlay_vm_image_path: &Path,
+    overlay_vm_image_path: &Utf8Path,
     base_vm_image_info: &VmImageInfo,
 ) -> Result<()> {
     let status = Command::new("qemu-img")
