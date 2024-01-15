@@ -32,4 +32,5 @@ fi
 tar -C "${temp_dir}" -xf "${temp_dir}/root.tar" "${candidates[0]}"
 chmod +w "${temp_dir}/${candidates[0]}"
 
+mkdir -p "$( dirname "${output_vm_image_file}" )"
 mv -f "${temp_dir}/${candidates[0]}" "${output_vm_image_file}"
