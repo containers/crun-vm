@@ -51,7 +51,7 @@ fn generate(
         st(w, "memory", &[("unit", "b")], memory.as_str())?;
 
         s(w, "os", &[], |w| {
-            st(w, "type", &[("arch", "x86_64"), ("machine", "q35")], "hvm")
+            st(w, "type", &[("machine", "q35")], "hvm")
         })?;
 
         // fw_cfg requires ACPI
@@ -77,8 +77,6 @@ fn generate(
         }
 
         s(w, "devices", &[], |w| {
-            st(w, "emulator", &[], "/usr/bin/qemu-system-x86_64")?;
-
             s(w, "serial", &[("type", "pty")], |w| {
                 se(w, "target", &[("port", "0")])
             })?;
