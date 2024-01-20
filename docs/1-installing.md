@@ -49,18 +49,6 @@
        }
        ```
 
-     - In `/etc/sysconfig/docker`, replace the line:
-
-       ```
-       --default-ulimit nofile=1024:1024 \
-       ```
-
-       With:
-
-       ```
-       --default-ulimit nofile=262144:262144 \
-       ```
-
      - Reload the `docker` service for the new configuration to take effect:
 
        ```console

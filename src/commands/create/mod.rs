@@ -49,7 +49,7 @@ pub fn create(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Create) -
     set_up_first_boot_config(&spec, &mounts, &custom_options, runtime_env)?;
     set_up_libvirt_domain_xml(&spec, &base_vm_image_info, &mounts, &custom_options)?;
 
-    adjust_container_resources(&mut spec);
+    adjust_container_rlimits_and_resources(&mut spec);
 
     spec.save(&config_path)?;
     spec.save(spec.root_path()?.join("crun-vm/config.json"))?; // to aid debugging
@@ -550,7 +550,29 @@ fn get_container_ssh_key_pair(spec: &oci_spec::runtime::Spec, env: RuntimeEnv) -
     Ok(fs::read_to_string(ssh_path.join("id_rsa.pub"))?)
 }
 
-fn adjust_container_resources(spec: &mut oci_spec::runtime::Spec) {
+fn adjust_container_rlimits_and_resources(spec: &mut oci_spec::runtime::Spec) {
+    if let Some(process) = spec.process() {
+        if let Some(rlimits) = process.rlimits() {
+            let mut process = process.clone();
+            let mut rlimits = rlimits.clone();
+
+            // Forwarding all UDP and TCP traffic requires passt to open many sockets. Ensure that
+            // the container's RLIMIT_NOFILE is large enough.
+            rlimits.retain(|rl| rl.typ() != oci_spec::runtime::LinuxRlimitType::RlimitNofile);
+            rlimits.push(
+                oci_spec::runtime::LinuxRlimitBuilder::default()
+                    .typ(oci_spec::runtime::LinuxRlimitType::RlimitNofile)
+                    .hard(262144u64)
+                    .soft(262144u64)
+                    .build()
+                    .unwrap(),
+            );
+
+            process.set_rlimits(Some(rlimits));
+            spec.set_process(Some(process));
+        }
+    }
+
     if let Some(linux) = spec.linux() {
         if let Some(resources) = linux.resources() {
             let mut linux = linux.clone();
