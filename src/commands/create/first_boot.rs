@@ -208,8 +208,9 @@ impl FirstBootConfig<'_> {
             .arg(out_config_dir_path.as_ref().join("meta-data"))
             .arg(out_config_dir_path.as_ref().join("user-data"))
             .arg(out_config_dir_path.as_ref().join("vendor-data"))
-            .spawn()?
-            .wait()?;
+            .spawn()
+            .and_then(|mut child| child.wait())
+            .context("Invoking genisoimage")?;
 
         ensure!(status.success(), "genisoimage failed");
 
