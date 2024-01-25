@@ -31,7 +31,7 @@ jobs:
       - name: Install Dependencies
         run: |
           echo "Installing workflow dependencies"
-          dnf install -y git cargo
+          dnf install -y git cargo libselinux-devel
 
       - name: Checkout
         uses: actions/checkout@v4
