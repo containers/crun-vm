@@ -1,0 +1,23 @@
+prepare:
+    - name: Install dependencies
+      how: install
+      package:
+        - cargo
+        - clippy
+        - make
+        - podman
+        - rustfmt
+
+/unit_test:
+    summary: Run unit tests
+    execute:
+        how: tmt
+        script: |
+            cargo install nextest
+            PATH=$PATH:/root/.cargo/bin make unit
+
+/validate_test:
+    summary: Run validate test
+    execute:
+        how: tmt
+        script: make validate
