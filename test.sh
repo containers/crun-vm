@@ -43,7 +43,7 @@ done
 nextest_run=(
     nextest run \
         --all-targets --all-features --failure-output=never \
-        -- "${@/#/test_run::engine_}""
+        -- "${@/#/test_run::engine_}"
     )
 
 if command -v cargo-nextest &> /dev/null; then
