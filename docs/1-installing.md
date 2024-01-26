@@ -28,7 +28,12 @@
 
 5. If you're using Podman:
 
-     - Merge the following configuration into `/etc/containers/containers.conf`:
+     - Merge the following configuration into
+       `/etc/containers/containers.conf`:
+
+       > For rootless Podman, you can instead use
+       > `${XDG_CONFIG_PATH}/containers/containers.conf`, where
+       > `$XDG_CONFIG_PATH` defaults to `${HOME}/.config`.
 
        ```toml
        [engine.runtimes]

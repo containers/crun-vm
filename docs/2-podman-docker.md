@@ -32,13 +32,14 @@ $ podman run \
     ""  # unused, but must specify command
 ```
 
-The VM console should take over your terminal. To abort the VM, press `ctrl-]`.
+The VM console should take over your terminal. At this point, the
+qcow2 image does not have any ssh keys, root password, or alternative
+users installed, so although you can interact with the VM's login
+screen, you will be unable to access a command prompt until more
+options are used in later sections.  To abort the VM, press `ctrl-]`.
 
 You can also detach from the VM without terminating it by pressing `ctrl-p,
 ctrl-q`. Afterwards, reattach by running:
-
-> For this command to work with Docker, you must replace the `--latest` flag
-> with the container's name or ID.
 
 ```console
 $ podman attach --latest
