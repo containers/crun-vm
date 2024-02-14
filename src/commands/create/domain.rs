@@ -149,7 +149,7 @@ fn generate(
                     s(
                         w,
                         "binary",
-                        &[("path", "/crun-vm/virtiofsd"), ("xattr", "on")],
+                        &[("path", "/crun-vm/virtiofsd.sh"), ("xattr", "on")],
                         |w| se(w, "sandbox", &[("mode", "chroot")]),
                     )?;
                     se(w, "source", &[("dir", path)])?;

@@ -13,6 +13,7 @@ use std::process::Command;
 use anyhow::{bail, ensure, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use nix::sys::stat::{major, makedev, minor, mknod, Mode, SFlag};
+use rust_embed::RustEmbed;
 
 use crate::commands::create::custom_opts::CustomOptions;
 use crate::commands::create::domain::set_up_libvirt_domain_xml;
@@ -83,15 +84,22 @@ fn set_up_container_root(
         set_file_context(spec.root_path()?, context)?;
     }
 
+    // set up container scripts
+
+    #[derive(RustEmbed)]
+    #[folder = "scripts/"]
+    struct Scripts;
+
+    for path in Scripts::iter() {
+        let path_in_host = spec.root_path()?.join("crun-vm").join(path.as_ref());
+        fs::create_dir_all(path_in_host.parent().unwrap())?;
+
+        let file = Scripts::get(&path).unwrap();
+        fs::write(&path_in_host, file.data)?;
+        fs::set_permissions(&path_in_host, Permissions::from_mode(0o555))?;
+    }
+
     // configure container entrypoint
-
-    const ENTRYPOINT_BYTES: &[u8] = include_bytes!("entrypoint.sh");
-
-    let entrypoint_path: Utf8PathBuf = spec.root_path()?.join("crun-vm/entrypoint.sh");
-    fs::create_dir_all(entrypoint_path.parent().unwrap())?;
-
-    fs::write(&entrypoint_path, ENTRYPOINT_BYTES)?;
-    fs::set_permissions(&entrypoint_path, Permissions::from_mode(0o555))?;
 
     let command = match custom_options.print_libvirt_xml {
         true => vec!["cat", "/crun-vm/domain.xml"],
