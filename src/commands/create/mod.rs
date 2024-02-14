@@ -513,38 +513,41 @@ fn set_up_first_boot_config(
 /// cloud-init but the user injected their public key into it themselves.
 fn get_container_ssh_key_pair(spec: &oci_spec::runtime::Spec, env: RuntimeEnv) -> Result<String> {
     let ssh_path = spec.root_path()?.join("root/.ssh");
-    fs::create_dir_all(&ssh_path)?;
 
-    let try_copy_user_key_pair = || -> Result<bool> {
-        if env != RuntimeEnv::Other {
-            // definitely not Podman, we're probably not running as the user that invoked the engine
-            return Ok(false);
-        }
+    if !ssh_path.join("id_rsa.pub").exists() {
+        fs::create_dir_all(&ssh_path)?;
 
-        if let Some(user_home_path) = home::home_dir() {
-            let user_ssh = user_home_path.join(".ssh");
-
-            if user_ssh.join("id_rsa.pub").is_file() && user_ssh.join("id_rsa").is_file() {
-                fs::copy(user_ssh.join("id_rsa.pub"), ssh_path.join("id_rsa.pub"))?;
-                fs::copy(user_ssh.join("id_rsa"), ssh_path.join("id_rsa"))?;
-                return Ok(true);
+        let try_copy_user_key_pair = || -> Result<bool> {
+            if env != RuntimeEnv::Other {
+                // definitely not Podman, we're probably not running as the user that invoked the engine
+                return Ok(false);
             }
+
+            if let Some(user_home_path) = home::home_dir() {
+                let user_ssh = user_home_path.join(".ssh");
+
+                if user_ssh.join("id_rsa.pub").is_file() && user_ssh.join("id_rsa").is_file() {
+                    fs::copy(user_ssh.join("id_rsa.pub"), ssh_path.join("id_rsa.pub"))?;
+                    fs::copy(user_ssh.join("id_rsa"), ssh_path.join("id_rsa"))?;
+                    return Ok(true);
+                }
+            }
+
+            Ok(false)
+        };
+
+        if !try_copy_user_key_pair()? {
+            let status = Command::new("ssh-keygen")
+                .arg("-q")
+                .arg("-f")
+                .arg(ssh_path.join("id_rsa"))
+                .arg("-N")
+                .arg("")
+                .spawn()?
+                .wait()?;
+
+            ensure!(status.success(), "ssh-keygen failed");
         }
-
-        Ok(false)
-    };
-
-    if !try_copy_user_key_pair()? {
-        let status = Command::new("ssh-keygen")
-            .arg("-q")
-            .arg("-f")
-            .arg(ssh_path.join("id_rsa"))
-            .arg("-N")
-            .arg("")
-            .spawn()?
-            .wait()?;
-
-        ensure!(status.success(), "ssh-keygen failed");
     }
 
     Ok(fs::read_to_string(ssh_path.join("id_rsa.pub"))?)
