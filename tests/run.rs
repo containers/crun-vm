@@ -5,8 +5,6 @@
 use std::env;
 use std::io::{BufWriter, Write};
 use std::process::{Command, Stdio};
-use std::thread;
-use std::time::Duration;
 
 use anyhow::{anyhow, Result};
 use camino::Utf8Path;
@@ -88,39 +86,21 @@ fn test_run(engine: Engine, case: TestCase) {
 
     // launch VM
 
-    let mut run_child: std::process::Child = engine
+    let status = engine
         .command("run")
         .arg(format!("--name={}", container_name))
         .arg("--rm")
+        .arg("--detach")
         .args(&case.run_args)
         .spawn()
+        .unwrap()
+        .wait()
         .unwrap();
+    assert!(status.success());
 
-    // wait until we can exec into the VM
+    // run the test script
 
     let result = (|| -> Result<()> {
-        loop {
-            assert!(run_child.try_wait()?.is_none(), "run command exited");
-
-            let status = engine
-                .command("exec")
-                .arg(&container_name)
-                .arg(&case.exec_user)
-                .stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .spawn()?
-                .wait()?;
-
-            if status.success() {
-                break;
-            }
-        }
-
-        thread::sleep(Duration::from_secs(3)); // work around some flakiness
-
-        // run the test script
-
         let mut exec_child = engine
             .command("exec")
             .arg("-i")
@@ -133,7 +113,8 @@ fn test_run(engine: Engine, case: TestCase) {
 
         {
             let mut writer = BufWriter::new(exec_child.stdin.take().unwrap());
-            writer.write_all("set -e\n".as_bytes())?;
+            writer.write_all("set -ex\n".as_bytes())?;
+            writer.write_all("! command -v cloud-init || cloud-init status --wait\n".as_bytes())?;
             writer.write_all(case.test_script.as_bytes())?;
             writer.write_all("\n".as_bytes())?;
             writer.flush()?;
@@ -157,9 +138,6 @@ fn test_run(engine: Engine, case: TestCase) {
         .wait()
         .unwrap();
     assert!(status.success());
-
-    let status = run_child.wait().unwrap();
-    assert_eq!(status.code(), Some(143)); // SIGTERM
 
     result.unwrap();
 }
