@@ -5,7 +5,7 @@
 1. Install crun-vm's runtime dependencies:
 
    ```console
-   $ dnf install bash coreutils crun genisoimage libselinux-devel libvirt-client libvirt-daemon-driver-qemu libvirt-daemon-log qemu-img qemu-system-x86-core shadow-utils util-linux virtiofsd
+   $ dnf install bash coreutils crun genisoimage libselinux-devel libvirt-client libvirt-daemon-driver-qemu libvirt-daemon-log openssh-clients qemu-img qemu-system-x86-core shadow-utils util-linux virtiofsd
    ```
 
 2. Install Rust and Cargo if you do not already have Rust tooling available:
