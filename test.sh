@@ -42,7 +42,7 @@ done
 
 nextest_run=(
     nextest run \
-        --all-targets --all-features \
+        --all-targets --all-features --test-threads $(( $(nproc) / 2 )) \
         -- "${@/#/test_run::engine_}"
     )
 
