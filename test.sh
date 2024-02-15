@@ -42,7 +42,7 @@ done
 
 nextest_run=(
     nextest run \
-        --all-targets --all-features --failure-output=never \
+        --all-targets --all-features \
         -- "${@/#/test_run::engine_}"
     )
 
