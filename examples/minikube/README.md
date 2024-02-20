@@ -6,7 +6,7 @@ this also points `kubectl` at the minikube cluster):
 
 ```console
 $ ./minikube-start.sh
-   Compiling crun-vm v0.1.1 (/home/afaria/repos/crun-vm)
+   Compiling crun-vm v0.1.2 (/home/afaria/repos/crun-vm)
     Finished dev [unoptimized + debuginfo] target(s) in 1.38s
 😄  [crun-vm-example] minikube v1.32.0 on Fedora 39
 [...]
