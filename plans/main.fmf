@@ -15,15 +15,14 @@ prepare:
       script:
         - sudo systemctl start virtqemud
 
-/unit_test:
-    summary: Run unit tests
+/test:
+    summary: Test
     execute:
         how: tmt
-        script: |
-            PATH=$PATH:/root/.cargo/bin make unit
+        script: PATH=$PATH:/root/.cargo/bin make test
 
-/validate_test:
-    summary: Run validate test
+/lint:
+    summary: Lint
     execute:
         how: tmt
-        script: make validate
+        script: make lint
