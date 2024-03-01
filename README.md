@@ -31,7 +31,6 @@
   1. [Installing crun-vm](docs/1-installing.md)
   2. [Using crun-vm as a Podman or Docker runtime](docs/2-podman-docker.md)
   3. [Using crun-vm as a Kubernetes runtime](docs/3-kubernetes.md)
-  4. [Internals](docs/4-internals.md)
 
 > [!TIP]
 > See also how you can [combine **crun-vm** and **Podman Quadlet** to easily
