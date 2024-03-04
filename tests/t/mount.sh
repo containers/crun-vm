@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-for os in fedora coreos; do
+for os in "${!TEST_IMAGES[@]}"; do
 
     image="${TEST_IMAGES[$os]}"
     user="${TEST_IMAGES_DEFAULT_USER[$os]}"

@@ -33,13 +33,13 @@ pub fn fix_selinux_label(process: &mut oci_spec::runtime::Process) {
 
 pub fn set_file_context(path: impl AsRef<Utf8Path>, context: &str) -> Result<()> {
     extern "C" {
-        fn setfilecon(path: *const c_char, con: *const c_char) -> i32;
+        fn lsetfilecon(path: *const c_char, con: *const c_char) -> i32;
     }
 
     let path = CString::new(path.as_ref().as_os_str().as_bytes())?;
     let context = CString::new(context.as_bytes())?;
 
-    if unsafe { setfilecon(path.as_ptr(), context.as_ptr()) } != 0 {
+    if unsafe { lsetfilecon(path.as_ptr(), context.as_ptr()) } != 0 {
         return Err(io::Error::last_os_error().into());
     }
 
@@ -198,7 +198,7 @@ pub trait SpecExt {
         linux_device_cgroup: oci_spec::runtime::LinuxDeviceCgroup,
     );
     fn process_capabilities_insert_beip(&mut self, capability: oci_spec::runtime::Capability);
-    fn linux_seccomp_syscalls_push(&mut self, linux_syscall: oci_spec::runtime::LinuxSyscall);
+    fn linux_seccomp_syscalls_push_front(&mut self, linux_syscall: oci_spec::runtime::LinuxSyscall);
 }
 
 impl SpecExt for oci_spec::runtime::Spec {
@@ -276,7 +276,10 @@ impl SpecExt for oci_spec::runtime::Spec {
         });
     }
 
-    fn linux_seccomp_syscalls_push(&mut self, linux_syscall: oci_spec::runtime::LinuxSyscall) {
+    fn linux_seccomp_syscalls_push_front(
+        &mut self,
+        linux_syscall: oci_spec::runtime::LinuxSyscall,
+    ) {
         self.set_linux({
             let mut linux = self.linux().clone().expect("linux config");
             linux.set_seccomp({
@@ -284,7 +287,7 @@ impl SpecExt for oci_spec::runtime::Spec {
                 if let Some(seccomp) = &mut seccomp {
                     seccomp.set_syscalls({
                         let mut syscalls = seccomp.syscalls().clone().unwrap_or_default();
-                        syscalls.push(linux_syscall);
+                        syscalls.insert(0, linux_syscall);
                         Some(syscalls)
                     });
                 }
