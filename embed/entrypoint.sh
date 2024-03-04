@@ -5,6 +5,8 @@ trap 'exit 143' SIGTERM
 
 set -o errexit -o pipefail -o nounset
 
+is_bootc_container=$1
+
 # clean up locks that may have been left around from the container being killed
 rm -fr /var/lock
 
@@ -52,6 +54,22 @@ cat <<EOF >/crun-vm/virsh
 virsh --connect "qemu+unix:///session?socket=$socket" "\$@"
 EOF
 chmod +x /crun-vm/virsh
+
+# wait until VM image is generated from bootable container (if applicable)
+
+if (( is_bootc_container == 1 )) && [[ ! -e /crun-vm/image/image ]]; then
+
+    fifo=/crun-vm/bootc/progress
+    while [[ ! -e "$fifo" ]]; do sleep 0.2; done
+    cat "$fifo"
+    rm "$fifo"
+
+    [[ -e /crun-vm/bootc/success ]]
+
+    mkdir -p /crun-vm/image
+    mv /crun-vm/bootc/image.raw /crun-vm/image/image
+
+fi
 
 # launch VM
 
