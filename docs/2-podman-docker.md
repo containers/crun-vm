@@ -1,11 +1,8 @@
 # 2. Using crun-vm as a Podman or Docker runtime
 
-Here we overview some of the major features provided by crun-vm.
-
-To run the examples below using Docker instead of Podman, you must additionally
-pass `--security-opt label=disable` to docker-run. Other than that, and unless
-otherwise stated, you can simply replace `podman` with `docker` in the commands
-below.
+Here we overview some of the major features provided by crun-vm. The commands
+below use `podman`, but unless otherwise stated you can simply replace it with
+`docker`.
 
 ## Booting VMs
 
