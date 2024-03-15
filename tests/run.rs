@@ -173,14 +173,9 @@ impl Engine {
 
         if subcommand == "run" {
             match self {
-                Engine::Podman => {
-                    cmd.arg(format!("--runtime={}", BINARY_PATH));
-                }
-                Engine::Docker => {
-                    cmd.arg("--security-opt=label=disable");
-                    cmd.arg("--runtime=crun-vm");
-                }
-            }
+                Engine::Podman => cmd.arg(format!("--runtime={}", BINARY_PATH)),
+                Engine::Docker => cmd.arg("--runtime=crun-vm"),
+            };
         }
 
         cmd.env("RUST_BACKTRACE", "1");
