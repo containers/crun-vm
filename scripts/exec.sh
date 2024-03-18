@@ -19,7 +19,7 @@ if [[ ! -e /crun-vm/ssh-successful ]]; then
     for (( i = 0; i < 60; ++i )); do
 
         set +e
-        output=$( __ssh "$1" </dev/null 2>&1 )
+        output=$( __ssh "$1" -o BatchMode=yes </dev/null 2>&1 )
         exit_code=$?
         set -e
 
@@ -32,7 +32,7 @@ if [[ ! -e /crun-vm/ssh-successful ]]; then
 
     done
 
-    if (( exit_code != 0 )); then
+    if (( exit_code != 0 )) && ! grep -iqE "Permission denied" <<< "$output"; then
         >&2 printf '%s\n' "$output"
         exit "$exit_code"
     fi
