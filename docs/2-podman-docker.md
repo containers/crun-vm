@@ -159,7 +159,7 @@ if the VM uses Ignition.
 ## SSH'ing into the VM
 
 Assuming the VM supports cloud-init or Ignition and exposes an SSH server on
-port 22, you can `ssh` into it using podman-exec as the VMs default user:
+port 22, you can `ssh` into it as root using podman-exec:
 
 > For this command to work with Docker, you must replace the `--latest` flag
 > with the container's name or ID.
@@ -172,27 +172,43 @@ $ podman run \
     ""
 8068a2c180e0f4bf494f5e0baa37d9f13a9810f76b361c0771b73666e47ec383
 
-$ podman exec --latest fedora whoami
-fedora
+$ podman exec --latest whoami
+Please login as the user "fedora" rather than the user "root".
+```
 
-$ podman exec -it --latest fedora
+This particular VM image does not allow logging in as root. To `ssh` into the VM
+as a different user, specify its username using the `--as` option immediately
+before the command (if any). You may need to pass in `--` before this option to
+prevent podman-exec from trying to interpret it:
+
+```console
+$ podman exec --latest -- --as fedora whoami
+fedora
+```
+
+If you just want a login shell, pass in an empty string as the command. The
+following would be the output if this VM image allowed logging in as root:
+
+```
+$ podman exec -it --latest ""
+[root@8068a2c180e0 ~]$
+```
+
+You can also log in as a specific user:
+
+```
+$ podman exec -it --latest -- --as fedora
 [fedora@8068a2c180e0 ~]$
 ```
 
-With cloud-init, the default user can vary between VM images. With Ignition,
-`core` is considered to be the default user. In both cases, if the SSH server
-allows password authentication, you should also be able to log in as any other
-user.
+When the VM supports cloud-init, `authorized_keys` is automatically set up to
+allow SSH access by podman-exec for users `root` and the default user as set in
+the image's cloud-init configuration. With Ignition, this is set up for users
+`root` and `core`.
 
-The `fedora` argument to podman-exec above, which would typically correspond to
-the command to be executed, determines instead the name of the user to `ssh`
-into the VM as. A command can optionally be specified with further arguments. If
-no command is specified, a login shell is initiated. In this case, you probably
-also want to pass flags `-it` to podman-exec.
-
-If you actually just want to exec into the container in which the VM is running
-(probably to debug some problem with crun-vm itself), pass in `-` as the
-username.
+> If you want to exec into the container in which the VM is running (probably to
+> debug some problem with crun-vm itself), pass in the `--container` flag
+> immediately before the command (if any).
 
 ## Port forwarding
 

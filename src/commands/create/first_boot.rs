@@ -17,7 +17,6 @@ pub struct FirstBootConfig<'a> {
 }
 
 impl FirstBootConfig<'_> {
-    /// Returns `true` if a cloud-init config should be passed to the VM.
     pub fn apply_to_cloud_init_config(
         &self,
         in_config_dir_path: Option<impl AsRef<Utf8Path>>,
@@ -132,10 +131,37 @@ impl FirstBootConfig<'_> {
 
         ssh_authorized_keys.push(self.container_public_key.into());
 
+        let write_files = match user_data_mapping
+            .entry("write_files".into())
+            .or_insert_with(|| serde_yaml::Value::Sequence(vec![]))
+        {
+            serde_yaml::Value::Sequence(v) => v,
+            _ => bail!("invalid user-data file"),
+        };
+
+        write_files.push({
+            let mut m = serde_yaml::Mapping::new();
+            m.insert("path".into(), "/root/.ssh/authorized_keys".into());
+            m.insert(
+                "content".into(),
+                ("\n".to_string() + self.container_public_key).into(),
+            );
+            m.insert("append".into(), true.into());
+            m.into()
+        });
+
         // create block device symlinks and udev rules
 
         let block_device_symlinks = self.get_block_device_symlinks();
         let block_device_udev_rules = self.get_block_device_udev_rules();
+
+        if let Some(rules) = &block_device_udev_rules {
+            let mut mapping = serde_yaml::Mapping::new();
+            mapping.insert("path".into(), "/etc/udev/rules.d/99-crun-vm.rules".into());
+            mapping.insert("content".into(), rules.to_string().into());
+
+            write_files.push(mapping.into());
+        }
 
         if !block_device_symlinks.is_empty() || block_device_udev_rules.is_some() {
             let runcmd = match user_data_mapping
@@ -164,22 +190,6 @@ impl FirstBootConfig<'_> {
             if block_device_udev_rules.is_some() {
                 runcmd.push("udevadm trigger".into());
             }
-        }
-
-        if let Some(rules) = block_device_udev_rules {
-            let write_files = match user_data_mapping
-                .entry("write_files".into())
-                .or_insert_with(|| serde_yaml::Value::Sequence(vec![]))
-            {
-                serde_yaml::Value::Sequence(v) => v,
-                _ => bail!("invalid user-data file"),
-            };
-
-            let mut mapping = serde_yaml::Mapping::new();
-            mapping.insert("path".into(), "/etc/udev/rules.d/99-crun-vm.rules".into());
-            mapping.insert("content".into(), rules.into());
-
-            write_files.push(mapping.into());
         }
 
         // generate iso
@@ -263,15 +273,17 @@ impl FirstBootConfig<'_> {
             _ => bail!("invalid config file"),
         };
 
-        let users_contains_core = users.iter().any(|u| match u {
-            serde_json::Value::Object(m) => m.get("name") == Some(&"core".into()),
-            _ => false,
-        });
+        for user in ["root", "core"] {
+            let user_exists = users.iter().any(|u| match u {
+                serde_json::Value::Object(m) => m.get("name") == Some(&user.into()),
+                _ => false,
+            });
 
-        if !users_contains_core {
-            users.push(serde_json::json!({
-                "name": "core",
-            }));
+            if !user_exists {
+                users.push(serde_json::json!({
+                    "name": user,
+                }));
+            }
         }
 
         for user in users {
@@ -280,7 +292,9 @@ impl FirstBootConfig<'_> {
                 _ => bail!("invalid config file"),
             };
 
-            if map.get("name") == Some(&"core".into()) {
+            let name = map.get("name");
+
+            if name == Some(&"root".into()) || name == Some(&"core".into()) {
                 let keys = match map
                     .entry("sshAuthorizedKeys")
                     .or_insert_with(|| serde_json::json!([]))
@@ -290,8 +304,6 @@ impl FirstBootConfig<'_> {
                 };
 
                 keys.push(self.container_public_key.into());
-
-                break;
             }
         }
 

@@ -67,15 +67,13 @@ $ kubectl logs my-vm
 ### SSH'ing into the pod/VM
 
 Assuming the VM supports cloud-init or Ignition, you can also SSH into it using
-`kubectl exec`, with the caveat that the user to SSH as is passed in place of
-the command (this is the same behavior as with `podman exec` or `docker exec`;
-see [SSH'ing into the VM]):
+`kubectl exec`:
 
 ```console
-$ kubectl exec my-vm -- fedora whoami
+$ kubectl exec my-vm -- --as fedora whoami
 fedora
 
-$ kubectl exec -it my-vm -- fedora
+$ kubectl exec -it my-vm -- --as fedora bash
 [fedora@my-vm ~]$
 ```
 
