@@ -7,7 +7,7 @@ use anyhow::{ensure, Result};
 use camino::Utf8Path;
 use xml::writer::XmlEvent;
 
-use crate::commands::create::custom_opts::{CustomOptions, VfioPciMdevUuid};
+use crate::commands::create::custom_opts::CustomOptions;
 use crate::commands::create::Mounts;
 use crate::util::{SpecExt, VmImageInfo};
 
@@ -19,7 +19,7 @@ pub fn set_up_libvirt_domain_xml(
 ) -> Result<()> {
     let path = spec.root_path()?.join("crun-vm/domain.xml");
 
-    generate(&path, spec, vm_image_info, mounts, custom_options)?;
+    generate(&path, spec, vm_image_info, mounts)?;
     merge_overlays(&path, &custom_options.merge_libvirt_xml)?;
 
     Ok(())
@@ -30,7 +30,6 @@ fn generate(
     spec: &oci_spec::runtime::Spec,
     vm_image_info: &VmImageInfo,
     mounts: &Mounts,
-    custom_options: &CustomOptions,
 ) -> Result<()> {
     let mut w = xml::EmitterConfig::new()
         .perform_indent(true)
@@ -156,41 +155,6 @@ fn generate(
                     se(w, "target", &[("dir", &tag)])?;
                     Ok(())
                 })?;
-            }
-
-            for address in &custom_options.vfio_pci {
-                s(
-                    w,
-                    "hostdev",
-                    &[("mode", "subsystem"), ("type", "pci")],
-                    |w| {
-                        s(w, "source", &[], |w| {
-                            se(
-                                w,
-                                "address",
-                                &[
-                                    ("domain", &format!("0x{:04x}", address.domain)),
-                                    ("bus", &format!("0x{:02x}", address.bus)),
-                                    ("slot", &format!("0x{:02x}", address.slot)),
-                                    ("function", &format!("0x{:01x}", address.function)),
-                                ],
-                            )
-                        })
-                    },
-                )?;
-            }
-
-            for VfioPciMdevUuid(uuid) in &custom_options.vfio_pci_mdev {
-                s(
-                    w,
-                    "hostdev",
-                    &[
-                        ("mode", "subsystem"),
-                        ("type", "mdev"),
-                        ("model", "vfio-pci"),
-                    ],
-                    |w| s(w, "source", &[], |w| se(w, "address", &[("uuid", uuid)])),
-                )?;
             }
 
             Ok(())
