@@ -1,5 +1,35 @@
 # 1. Installing crun-vm
 
+## On Fedora
+
+Run:
+
+```console
+$ dnf install crun-vm
+```
+
+Podman will then be able to make use of the crun-vm runtime.
+
+To also set up crun-vm for use with Docker:
+
+  - Merge the following configuration into `/etc/docker/daemon.json`:
+
+    ```json
+    {
+      "runtimes": {
+        "crun-vm": {
+          "path": "/usr/bin/crun-vm"
+        }
+      }
+    }
+    ```
+
+  - Reload the `docker` service for the new configuration to take effect:
+
+    ```console
+    $ service docker reload
+    ```
+
 ## Build and install from source (on Fedora)
 
 1. Install crun-vm's runtime dependencies:
