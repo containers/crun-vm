@@ -105,6 +105,7 @@ fn test_run(engine: Engine, case: TestCase) {
             .command("exec")
             .arg("-i")
             .arg(&container_name)
+            .arg("--as")
             .arg(&case.exec_user)
             .arg("bash")
             .arg("-s")
