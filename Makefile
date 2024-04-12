@@ -67,7 +67,9 @@ uninstall:
 
 #.PHONY: unit
 unit: $(CARGO_TARGET_DIR)
-	$(SHELL) test.sh podman
+	$(SHELL) tests/env.sh build
+	$(SHELL) tests/env.sh start
+	$(SHELL) tests/env.sh run all all
 
 #.PHONY: code_coverage
 code_coverage: $(CARGO_TARGET_DIR)
