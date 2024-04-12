@@ -106,9 +106,6 @@ this and do other first-boot customization, you can provide a [cloud-init]
 NoCloud configuration to the VM by passing in the non-standard option
 `--cloud-init` *after* the image specification:
 
-> For this command to work with Docker, you must provide an absolute path to
-> `--cloud-init`.
-
 ```console
 $ ls examples/cloud-init/config/
 meta-data  user-data  vendor-data
@@ -117,7 +114,7 @@ $ podman run \
     --runtime crun-vm \
     -it --rm \
     quay.io/containerdisks/fedora:39 \
-    --cloud-init examples/cloud-init/config
+    --cloud-init ~/examples/cloud-init/config  # path must be absolute
 ```
 
 You should now be able to log in with the default `fedora` username and password
@@ -139,15 +136,12 @@ $ podman run \
 Similarly, you can provide an [Ignition] configuration to the VM by passing in
 the `--ignition` option:
 
-> For this command to work with Docker, you must provide an absolute path to
-> `--ignition`.
-
 ```console
 $ podman run \
     --runtime crun-vm \
     -it --rm \
     quay.io/crun-vm/example-fedora-coreos:39 \
-    --ignition examples/ignition/config.ign
+    --ignition ~/examples/ignition/config.ign  # path must be absolute
 ```
 
 You should now be able to log in with the default `core` username and password
@@ -312,16 +306,13 @@ option also allows you specify a regular file as the source, and the source may
 be in any disk format known to QEMU (*e.g.*, raw, qcow2; when using `--device`,
 raw format is assumed):
 
-> For this command to work with Docker, you must provide absolute paths to
-> `--blockdev`.
-
 ```console
 $ podman run \
     --runtime crun-vm \
     -it --rm \
     quay.io/containerdisks/fedora:39 \
     --password pass \
-    --blockdev source=my-disk.qcow2,target=/home/fedora/my-disk,format=qcow2
+    --blockdev source=~/my-disk.qcow2,target=/home/fedora/my-disk,format=qcow2  # paths must be absolute
 ```
 
 ## Advanced options

@@ -110,57 +110,39 @@ impl CustomOptions {
             Ok(path_in_host)
         }
 
-        match env {
-            RuntimeEnv::Docker => {
-                // Docker doesn't run the runtime with the same working directory as the process
-                // that launched `docker-run`, so we require custom option paths to be absolute.
-                //
-                // TODO: There must be a better way...
-                ensure!(
-                    all_are_absolute(options.blockdev.iter().flat_map(|b| [&b.source, &b.target]))
-                        && all_are_absolute(&options.cloud_init)
-                        && all_are_absolute(&options.ignition)
-                        && all_are_absolute(&options.merge_libvirt_xml),
-                    concat!(
-                        "paths specified using --blockdev, --cloud-init, --ignition, or",
-                        " --merge-libvirt-xml must be absolute when using crun-vm as a Docker",
-                        " runtime",
-                    ),
-                );
+        // Docker doesn't run the runtime with the same working directory as the process
+        // that launched `docker-run`. Similarly, custom option paths in Kubernetes refer to
+        // paths in the container/VM, and there isn't a reasonable notion of what the
+        // current directory is. We thus simply always require custom option paths to be
+        // absolute.
+        ensure!(
+            all_are_absolute(options.blockdev.iter().flat_map(|b| [&b.source, &b.target]))
+                && all_are_absolute(&options.cloud_init)
+                && all_are_absolute(&options.ignition)
+                && all_are_absolute(&options.merge_libvirt_xml),
+            concat!(
+                "paths specified using --blockdev, --cloud-init, --ignition, or",
+                " --merge-libvirt-xml must be absolute",
+            ),
+        );
+
+        if env == RuntimeEnv::Kubernetes {
+            for blockdev in &mut options.blockdev {
+                blockdev.source = path_in_container_into_path_in_host(spec, &blockdev.source)?;
+                blockdev.target = path_in_container_into_path_in_host(spec, &blockdev.target)?;
             }
-            RuntimeEnv::Kubernetes => {
-                // Custom option paths in Kubernetes refer to paths in the container/VM, and there
-                // isn't a reasonable notion of what the current directory is.
-                ensure!(
-                    all_are_absolute(options.blockdev.iter().flat_map(|b| [&b.source, &b.target]))
-                        && all_are_absolute(&options.cloud_init)
-                        && all_are_absolute(&options.ignition)
-                        && all_are_absolute(&options.merge_libvirt_xml),
-                    concat!(
-                        "paths specified using --blockdev, --cloud-init, --ignition, or",
-                        " --merge-libvirt-xml must be absolute when using crun-vm as a",
-                        " Kubernetes runtime",
-                    ),
-                );
 
-                for blockdev in &mut options.blockdev {
-                    blockdev.source = path_in_container_into_path_in_host(spec, &blockdev.source)?;
-                    blockdev.target = path_in_container_into_path_in_host(spec, &blockdev.target)?;
-                }
-
-                if let Some(path) = &mut options.cloud_init {
-                    *path = path_in_container_into_path_in_host(spec, &path)?;
-                }
-
-                if let Some(path) = &mut options.ignition {
-                    *path = path_in_container_into_path_in_host(spec, &path)?;
-                }
-
-                for path in &mut options.merge_libvirt_xml {
-                    *path = path_in_container_into_path_in_host(spec, &path)?;
-                }
+            if let Some(path) = &mut options.cloud_init {
+                *path = path_in_container_into_path_in_host(spec, &path)?;
             }
-            RuntimeEnv::Other => {}
+
+            if let Some(path) = &mut options.ignition {
+                *path = path_in_container_into_path_in_host(spec, &path)?;
+            }
+
+            for path in &mut options.merge_libvirt_xml {
+                *path = path_in_container_into_path_in_host(spec, &path)?;
+            }
         }
 
         Ok(options)
