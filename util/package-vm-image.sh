@@ -12,9 +12,10 @@ fi
 vm_image_file=$1
 container_image_tag=$2
 
+abs_vm_image_file=$( readlink -e "${vm_image_file}" )
 image_path_in_container=/disk/$( basename "${vm_image_file}" )
 
-podman image build --file=- --tag="${container_image_tag}" . <<EOF
+podman image build --file=- --tag="${container_image_tag}" / <<EOF
 FROM scratch
-COPY ${vm_image_file@Q} ${image_path_in_container@Q}
+COPY ${abs_vm_image_file@Q} ${image_path_in_container@Q}
 EOF
