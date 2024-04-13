@@ -38,7 +38,7 @@ fn generate(
     s(&mut w, "domain", &[("type", "kvm")], |w| {
         st(w, "name", &[], "domain")?;
 
-        se(w, "cpu", &[("mode", "host-model")])?;
+        se(w, "cpu", &[("mode", "host-passthrough")])?;
         let vcpus = get_vcpu_count(spec).to_string();
         if let Some(cpu_set) = get_cpu_set(spec) {
             st(w, "vcpu", &[("cpuset", cpu_set.as_str())], vcpus.as_str())?;
