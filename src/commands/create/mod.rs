@@ -5,7 +5,8 @@ mod domain;
 mod first_boot;
 mod runtime_env;
 
-use std::fs::{self, Permissions};
+use std::fs::{self, File, Permissions};
+use std::io::ErrorKind;
 use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 use std::path::Path;
 use std::process::Command;
@@ -21,8 +22,9 @@ use crate::commands::create::first_boot::FirstBootConfig;
 use crate::commands::create::runtime_env::RuntimeEnv;
 use crate::crun::crun_create;
 use crate::util::{
-    bind_mount_dir_with_different_context, bind_mount_file, create_overlay_vm_image,
-    find_single_file_in_dirs, set_file_context, SpecExt, VmImageInfo,
+    bind_mount_dir_read_only_with_different_context, bind_mount_dir_with_different_context,
+    bind_mount_file, create_overlay_vm_image, find_single_file_in_dirs, is_mountpoint,
+    set_file_context, SpecExt, VmImageInfo,
 };
 
 pub fn create(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Create) -> Result<()> {
@@ -30,14 +32,29 @@ pub fn create(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Create) -
     let config_path = bundle_path.join("config.json");
 
     let mut spec = oci_spec::runtime::Spec::load(&config_path)?;
+
+    // We include container_id in the path to ensure no overlap with the user container's contents.
     let original_root_path = spec.root_path()?.to_path_buf();
+
+    let new_root_path = original_root_path.join(format!("crun-vm-root-{}", args.container_id));
+    fs::create_dir_all(&new_root_path)?;
+
+    let private_root_path = original_root_path.join(format!("crun-vm-priv-{}", args.container_id));
+    fs::create_dir_all(&private_root_path)?;
 
     let runtime_env = RuntimeEnv::current(&spec, &original_root_path)?;
     let custom_options = CustomOptions::from_spec(&spec, runtime_env)?;
 
-    set_up_container_root(&mut spec, bundle_path, &custom_options)?;
-    let base_vm_image_info =
-        set_up_vm_image(&spec, bundle_path, &original_root_path, &custom_options)?;
+    set_up_container_root(&mut spec, &new_root_path, &custom_options)?;
+    let is_first_create = is_first_create(&spec)?;
+
+    let base_vm_image_info = set_up_vm_image(
+        &spec,
+        &original_root_path,
+        &private_root_path,
+        &custom_options,
+        is_first_create,
+    )?;
 
     let mut mounts = Mounts::default();
     set_up_mounts(&mut spec, &mut mounts)?;
@@ -47,8 +64,10 @@ pub fn create(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Create) -
     set_up_extra_container_mounts_and_devices(&mut spec)?;
     set_up_security(&mut spec);
 
-    set_up_first_boot_config(&spec, &mounts, &custom_options, runtime_env)?;
-    set_up_libvirt_domain_xml(&spec, &base_vm_image_info, &mounts, &custom_options)?;
+    if is_first_create {
+        set_up_first_boot_config(&spec, &mounts, &custom_options, runtime_env)?;
+        set_up_libvirt_domain_xml(&spec, &base_vm_image_info, &mounts, &custom_options)?;
+    }
 
     adjust_container_rlimits_and_resources(&mut spec);
 
@@ -60,28 +79,43 @@ pub fn create(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Create) -
     Ok(())
 }
 
+fn is_first_create(spec: &oci_spec::runtime::Spec) -> Result<bool> {
+    let path = spec.root_path()?.join("crun-vm/create-ran");
+
+    let error = File::options()
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .err();
+
+    match error {
+        Some(e) if e.kind() == ErrorKind::AlreadyExists => Ok(false),
+        Some(e) => Err(e.into()),
+        None => Ok(true),
+    }
+}
+
 fn set_up_container_root(
     spec: &mut oci_spec::runtime::Spec,
-    bundle_path: &Utf8Path,
+    new_root_path: &Utf8Path,
     custom_options: &CustomOptions,
 ) -> Result<()> {
     // create root directory
 
     spec.set_root(Some(
         oci_spec::runtime::RootBuilder::default()
-            .path(bundle_path.join("crun-vm-root"))
+            .path(new_root_path)
             .readonly(false)
             .build()
             .unwrap(),
     ));
 
-    fs::create_dir_all(spec.root_path()?)?;
-
     if let Some(context) = spec.mount_label() {
         // the directory we're using as the root for the container is not the one that podman
         // prepared for us, so we need to set its context ourselves to prevent SELinux from getting
         // angry at us
-        set_file_context(spec.root_path()?, context)?;
+        set_file_context(new_root_path, context)?;
     }
 
     // set up container scripts
@@ -91,7 +125,7 @@ fn set_up_container_root(
     struct Scripts;
 
     for path in Scripts::iter() {
-        let path_in_host = spec.root_path()?.join("crun-vm").join(path.as_ref());
+        let path_in_host = new_root_path.join("crun-vm").join(path.as_ref());
         fs::create_dir_all(path_in_host.parent().unwrap())?;
 
         let file = Scripts::get(&path).unwrap();
@@ -119,9 +153,10 @@ fn set_up_container_root(
 
 fn set_up_vm_image(
     spec: &oci_spec::runtime::Spec,
-    bundle_path: &Utf8Path,
     original_root_path: &Utf8Path,
+    private_root_path: &Utf8Path,
     custom_options: &CustomOptions,
+    is_first_create: bool,
 ) -> Result<VmImageInfo> {
     // where inside the container to look for the VM image
     const VM_IMAGE_SEARCH_PATHS: [&str; 2] = ["./", "disk/"];
@@ -136,54 +171,63 @@ fn set_up_vm_image(
 
     // mount user-provided VM image file into container
 
+    // TODO: Can we assume the container engine will always clean up all our mounts, since they're
+    // under the container's root?
+
     let mirror_vm_image_path_in_container =
         Utf8Path::new("crun-vm/image").join(vm_image_path_in_host.file_name().unwrap());
     let mirror_vm_image_path_in_host = spec.root_path()?.join(&mirror_vm_image_path_in_container);
     let mirror_vm_image_path_in_container =
         Utf8Path::new("/").join(mirror_vm_image_path_in_container);
 
-    let private_dir = if custom_options.persistent {
+    if custom_options.persistent {
         let vm_image_dir_path = vm_image_path_in_host.parent().unwrap();
         let vm_image_dir_name = vm_image_dir_path.file_name().unwrap();
 
-        let overlay_private_dir_name = format!(".crun-vm.{}.tmp", vm_image_dir_name);
-        let overlay_private_dir_path = vm_image_dir_path
-            .parent()
-            .unwrap()
-            .join(overlay_private_dir_name);
+        // Mount overlayfs to expose the user's VM image file with a different SELinux context so we
+        // can always access it, using the file's parent as the upperdir so that writes still
+        // propagate to it.
 
-        overlay_private_dir_path
-    } else {
-        bundle_path.join("crun-vm-vm-image-overlayfs")
-    };
+        if !is_mountpoint(mirror_vm_image_path_in_host.parent().unwrap())? {
+            let scratch_dir_path = vm_image_dir_path
+                .parent()
+                .unwrap()
+                .join(format!(".crun-vm.{}.tmp", vm_image_dir_name));
 
-    // We may need to change the VM image context to actually be able to access it, but we don't
-    // want to change the user's original image file and also don't want to do a full data copy, so
-    // we use an overlayfs mount, which allows us to expose the same file with a different context.
-    //
-    // TODO: Clean up `private_dir` when VM is terminated (would be best-effort, but better than
-    // nothing).
-    bind_mount_dir_with_different_context(
-        vm_image_path_in_host.parent().unwrap(),
-        mirror_vm_image_path_in_host.parent().unwrap(),
-        spec.mount_label(),
-        custom_options.persistent,
-        private_dir,
-    )?;
+            bind_mount_dir_with_different_context(
+                vm_image_path_in_host.parent().unwrap(),
+                mirror_vm_image_path_in_host.parent().unwrap(),
+                spec.mount_label(),
+                true,
+                scratch_dir_path,
+            )?;
+        }
 
-    let mut vm_image_info = VmImageInfo::of(&mirror_vm_image_path_in_host)?;
-
-    if custom_options.persistent {
-        // We want to propagate writes but not removal, so that the user's file isn't deleted by
-        // Podman on cleanup, so we bind mount it on top of itself.
+        // Prevent the container engine from deleting the user's actual VM image file by mounting it
+        // on top of itself under our overlayfs mount.
 
         bind_mount_file(&mirror_vm_image_path_in_host, &mirror_vm_image_path_in_host)?;
 
+        let mut vm_image_info = VmImageInfo::of(&mirror_vm_image_path_in_host)?;
         vm_image_info.path = mirror_vm_image_path_in_container;
+
+        Ok(vm_image_info)
     } else {
-        // The overlayfs mount already isolates the user's original image file from writes, but to
-        // ensure that we get copy-on-write and page cache sharing even when the underlying file
-        // system doesn't support reflinks, we create a qcow2 overlay and use that as the image.
+        // Mount overlayfs to expose the user's VM image file with a different SELinux context so we
+        // can always access it.
+
+        if !is_mountpoint(mirror_vm_image_path_in_host.parent().unwrap())? {
+            bind_mount_dir_read_only_with_different_context(
+                vm_image_path_in_host.parent().unwrap(),
+                mirror_vm_image_path_in_host.parent().unwrap(),
+                spec.mount_label(),
+                private_root_path.join("scratch"),
+            )?;
+        }
+
+        // The overlayfs mount forbids writes to the VM image file, and also we want to get
+        // copy-on-write and page cache sharing even when the underlying file system doesn't support
+        // reflinks, so we create a qcow2 overlay image.
 
         let overlay_vm_image_path_in_container = Utf8PathBuf::from("crun-vm/image-overlay.qcow2");
         let overlay_vm_image_path_in_host =
@@ -191,13 +235,19 @@ fn set_up_vm_image(
         let overlay_vm_image_path_in_container =
             Utf8Path::new("/").join(overlay_vm_image_path_in_container);
 
-        vm_image_info.path = mirror_vm_image_path_in_container;
-        create_overlay_vm_image(&overlay_vm_image_path_in_host, &vm_image_info)?;
+        let mut base_vm_image_info = VmImageInfo::of(&mirror_vm_image_path_in_host)?;
+        base_vm_image_info.path = mirror_vm_image_path_in_container;
 
-        vm_image_info.path = overlay_vm_image_path_in_container;
+        if is_first_create {
+            create_overlay_vm_image(&overlay_vm_image_path_in_host, &base_vm_image_info)?;
+        }
+
+        Ok(VmImageInfo {
+            path: Utf8Path::new("/").join(overlay_vm_image_path_in_container),
+            size: base_vm_image_info.size,
+            format: "qcow2".to_string(),
+        })
     }
-
-    Ok(vm_image_info)
 }
 
 #[derive(Default)]

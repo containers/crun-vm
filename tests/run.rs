@@ -19,16 +19,7 @@ fn simple_test_case(image: &str, home_dir: &str) -> TestCase {
     }
 }
 
-fn complex_test_case(
-    image: &str,
-    home_dir: &str,
-    cloud_init_and_ignition_prefix: &str,
-) -> TestCase {
-    let cloud_init_and_ignition_prefix = match cloud_init_and_ignition_prefix {
-        "" => "".to_string(),
-        prefix => format!("{prefix}/"),
-    };
-
+fn complex_test_case(image: &str, home_dir: &str) -> TestCase {
     TestCase {
         run_args: vec![
             "-h=my-test-vm".to_string(),
@@ -36,8 +27,8 @@ fn complex_test_case(
             format!("-v=./README.md:{home_dir}/README.md:z,ro"), // "ro" is so qemu uses shared lock
             format!("--mount=type=tmpfs,dst={home_dir}/tmp"),
             image.to_string(),
-            format!("--cloud-init={cloud_init_and_ignition_prefix}examples/cloud-init/config"),
-            format!("--ignition={cloud_init_and_ignition_prefix}examples/ignition/config.ign"),
+            format!("--cloud-init={REPO_PATH}/examples/cloud-init/config"),
+            format!("--ignition={REPO_PATH}/examples/ignition/config.ign"),
         ],
         exec_user: Utf8Path::new(home_dir).file_name().unwrap().to_string(),
         test_script: format!(
@@ -63,20 +54,8 @@ fn complex_test_case(
         simple_test_case("quay.io/containerdisks/fedora:39", "/home/fedora"),
         simple_test_case("quay.io/crun-vm/example-fedora-coreos:39", "/var/home/core"),
 
-        complex_test_case("quay.io/containerdisks/fedora:39", "/home/fedora", REPO_PATH),
-        complex_test_case("quay.io/crun-vm/example-fedora-coreos:39", "/var/home/core", REPO_PATH),
-    ]
-)]
-#[test_matrix(
-    // engines
-    [
-        Engine::Podman,
-    ],
-
-    // cases
-    [
-        complex_test_case("quay.io/containerdisks/fedora:39", "/home/fedora", ""),
-        complex_test_case("quay.io/crun-vm/example-fedora-coreos:39", "/var/home/core", ""),
+        complex_test_case("quay.io/containerdisks/fedora:39", "/home/fedora"),
+        complex_test_case("quay.io/crun-vm/example-fedora-coreos:39", "/var/home/core"),
     ]
 )]
 fn test_run(engine: Engine, case: TestCase) {

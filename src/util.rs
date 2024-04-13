@@ -2,9 +2,9 @@
 
 use std::ffi::{c_char, CString};
 use std::fs::{self, OpenOptions, Permissions};
-use std::io;
+use std::io::{self, ErrorKind};
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::process::{Command, Stdio};
 
 use anyhow::{anyhow, bail, ensure, Result};
@@ -25,6 +25,23 @@ pub fn set_file_context(path: impl AsRef<Utf8Path>, context: &str) -> Result<()>
     }
 
     Ok(())
+}
+
+pub fn is_mountpoint(path: impl AsRef<Utf8Path>) -> Result<bool> {
+    let parent = path
+        .as_ref()
+        .parent()
+        .ok_or_else(|| anyhow!("path does not have a parent"))?;
+
+    let path_dev = match fs::symlink_metadata(path.as_ref()) {
+        Ok(meta) => meta.dev(),
+        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(false),
+        Err(e) => return Err(e.into()),
+    };
+
+    let parent_dev = fs::symlink_metadata(parent)?.dev();
+
+    Ok(path_dev != parent_dev)
 }
 
 pub fn bind_mount_file(from: impl AsRef<Utf8Path>, to: impl AsRef<Utf8Path>) -> Result<()> {
@@ -59,11 +76,24 @@ pub fn bind_mount_file(from: impl AsRef<Utf8Path>, to: impl AsRef<Utf8Path>) -> 
     Ok(())
 }
 
+fn escape_path(mount_option: impl AsRef<Utf8Path>) -> String {
+    mount_option
+        .as_ref()
+        .as_str()
+        .replace('\\', "\\\\")
+        .replace(',', "\\,")
+}
+
+fn escape_context(mount_option: &str) -> String {
+    assert!(!mount_option.contains('"'));
+    format!("\"{}\"", mount_option)
+}
+
 /// Expose directory `from` at `to` with the given SELinux `context`, if any, recursively applied.
 ///
 /// This does *not* modify the SELinux context of `from` nor of files under `from`.
 ///
-/// If `propagate_changes` is true, `private_dir` must belong to the same file system as `from` and
+/// If `propagate_changes` is true, `scratch_dir` must belong to the same file system as `from` and
 /// be a separate subtree.
 ///
 /// TODO: Is this a neat relabeling trick or simply a bad hack?
@@ -72,26 +102,14 @@ pub fn bind_mount_dir_with_different_context(
     to: impl AsRef<Utf8Path>,
     context: Option<&str>,
     propagate_changes: bool,
-    private_dir: impl AsRef<Utf8Path>,
+    scratch_dir: impl AsRef<Utf8Path>,
 ) -> Result<()> {
-    let layer_dir = private_dir.as_ref().join("layer");
-    let work_dir = private_dir.as_ref().join("work");
+    let layer_dir = scratch_dir.as_ref().join("layer");
+    let work_dir = scratch_dir.as_ref().join("work");
 
     fs::create_dir_all(&layer_dir)?;
     fs::create_dir_all(&work_dir)?;
     fs::create_dir_all(to.as_ref())?;
-
-    fn escape_path(mount_option: &Utf8Path) -> String {
-        mount_option
-            .as_str()
-            .replace('\\', "\\\\")
-            .replace(',', "\\,")
-    }
-
-    fn escape_context(mount_option: &str) -> String {
-        assert!(!mount_option.contains('"'));
-        format!("\"{}\"", mount_option)
-    }
 
     let (lower_dir, upper_dir) = match propagate_changes {
         true => (layer_dir.as_path(), from.as_ref()),
@@ -127,6 +145,49 @@ pub fn bind_mount_dir_with_different_context(
     // Make any necessary manual cleanup a bit easier by ensuring the workdir is accessible to the
     // user that Podman is running under.
     fs::set_permissions(work_dir.join("work"), Permissions::from_mode(0o700))?;
+
+    Ok(())
+}
+
+/// Expose directory `from` read-only at `to` with the given SELinux `context`, if any, recursively
+/// applied.
+///
+/// This does *not* modify the SELinux context of `from` nor of files under `from`.
+///
+/// TODO: Is this a neat relabeling trick or simply a bad hack?
+pub fn bind_mount_dir_read_only_with_different_context(
+    from: impl AsRef<Utf8Path>,
+    to: impl AsRef<Utf8Path>,
+    context: Option<&str>,
+    scratch_dir: impl AsRef<Utf8Path>,
+) -> Result<()> {
+    fs::create_dir_all(scratch_dir.as_ref())?;
+    fs::create_dir_all(to.as_ref())?;
+
+    let mut options = format!(
+        "lowerdir={}:{}",
+        escape_path(scratch_dir),
+        escape_path(from)
+    );
+
+    if let Some(context) = context {
+        options = format!("{},context={}", options, escape_context(context));
+    }
+
+    if let Err(e) = nix::mount::mount(
+        Some("overlay"),
+        to.as_ref().as_std_path(),
+        Some("overlay"),
+        MsFlags::empty(),
+        Some(options.as_str()),
+    ) {
+        bail!(
+            "mount(\"overlay\", {:?}, \"overlay\", 0, {:?}) failed: {}",
+            to.as_ref(),
+            options,
+            e,
+        );
+    }
 
     Ok(())
 }
