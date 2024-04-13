@@ -3,23 +3,35 @@
 
 set -e
 
+timeout=$1
+user=$2
+command=( "${@:3}" )
+
 __ssh() {
     ssh \
         -o LogLevel=ERROR \
         -o StrictHostKeyChecking=no \
-        -l "$1" \
+        -l "$user" \
         localhost \
-        "${@:2}"
+        "$@"
 }
 
 if [[ ! -e /crun-vm/ssh-successful ]]; then
 
     # retry ssh for some time, ignoring some common errors
 
-    for (( i = 0; i < 60; ++i )); do
+    start_time=$( date +%s )
+    end_time=$(( start_time + timeout ))
+
+    while true; do
+
+        if (( timeout > 0 && $( date +%s ) >= end_time )); then
+            >&2 echo "exec timed out while attempting ssh"
+            exit 255
+        fi
 
         set +e
-        output=$( __ssh "$1" -o BatchMode=yes </dev/null 2>&1 )
+        output=$( __ssh -o BatchMode=yes </dev/null 2>&1 )
         exit_code=$?
         set -e
 
@@ -43,4 +55,4 @@ if [[ ! -e /crun-vm/ssh-successful ]]; then
 
 fi
 
-__ssh "$1" -- "${@:2}"
+__ssh -- "${command[@]}"
