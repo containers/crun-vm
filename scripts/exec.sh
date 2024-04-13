@@ -11,6 +11,7 @@ __ssh() {
     ssh \
         -o LogLevel=ERROR \
         -o StrictHostKeyChecking=no \
+        -o UserKnownHostsFile=/dev/null \
         -l "$user" \
         localhost \
         "$@"
