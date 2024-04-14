@@ -5,7 +5,6 @@ mod crun;
 mod util;
 
 use std::ffi::OsStr;
-use std::iter;
 
 use anyhow::Result;
 use clap::Parser;
@@ -22,7 +21,8 @@ struct Args {
 }
 
 // Adapted from https://github.com/containers/youki/blob/main/crates/youki/src/main.rs
-#[derive(clap::Parser, Debug)]
+#[derive(Parser, Debug)]
+#[clap(no_binary_name = true)]
 enum Command {
     #[clap(flatten)]
     Standard(Box<liboci_cli::StandardCmd>),
@@ -37,8 +37,7 @@ pub fn main(args: impl IntoIterator<Item = impl AsRef<OsStr>>) -> Result<()> {
         .map(|a| a.as_ref().to_os_string())
         .collect::<Vec<_>>();
 
-    let parsed_args =
-        Args::parse_from(iter::once(&OsStr::new("crun-vm").to_os_string()).chain(&args));
+    let parsed_args = Args::parse_from(&args);
 
     match parsed_args.command {
         Command::Standard(cmd) => {

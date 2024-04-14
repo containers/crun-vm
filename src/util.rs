@@ -93,36 +93,42 @@ fn escape_context(mount_option: &str) -> String {
 ///
 /// This does *not* modify the SELinux context of `from` nor of files under `from`.
 ///
-/// If `propagate_changes` is true, `scratch_dir` must belong to the same file system as `from` and
-/// be a separate subtree.
+/// If `read_only` is false, `scratch_dir` must belong to the same file system as `from` and be a
+/// separate subtree.
 ///
 /// TODO: Is this a neat relabeling trick or simply a bad hack?
 pub fn bind_mount_dir_with_different_context(
     from: impl AsRef<Utf8Path>,
     to: impl AsRef<Utf8Path>,
-    context: Option<&str>,
-    propagate_changes: bool,
     scratch_dir: impl AsRef<Utf8Path>,
+    context: Option<&str>,
+    read_only: bool,
 ) -> Result<()> {
-    let layer_dir = scratch_dir.as_ref().join("layer");
-    let work_dir = scratch_dir.as_ref().join("work");
-
-    fs::create_dir_all(&layer_dir)?;
-    fs::create_dir_all(&work_dir)?;
     fs::create_dir_all(to.as_ref())?;
 
-    let (lower_dir, upper_dir) = match propagate_changes {
-        true => (layer_dir.as_path(), from.as_ref()),
-        false => (from.as_ref(), layer_dir.as_path()),
+    let mut options = if read_only {
+        fs::create_dir_all(scratch_dir.as_ref())?;
+
+        format!(
+            "lowerdir={}:{}",
+            escape_path(scratch_dir.as_ref()),
+            escape_path(from)
+        )
+    } else {
+        let layer_dir = scratch_dir.as_ref().join("layer");
+        let work_dir = scratch_dir.as_ref().join("work");
+
+        fs::create_dir_all(&layer_dir)?;
+        fs::create_dir_all(&work_dir)?;
+
+        format!(
+            "lowerdir={},upperdir={},workdir={}",
+            escape_path(layer_dir),
+            escape_path(from),
+            escape_path(&work_dir),
+        )
     };
 
-    let mut options = format!(
-        "lowerdir={},upperdir={},workdir={}",
-        escape_path(lower_dir),
-        escape_path(upper_dir),
-        escape_path(&work_dir),
-    );
-
     if let Some(context) = context {
         options = format!("{},context={}", options, escape_context(context));
     }
@@ -142,51 +148,13 @@ pub fn bind_mount_dir_with_different_context(
         );
     }
 
-    // Make any necessary manual cleanup a bit easier by ensuring the workdir is accessible to the
-    // user that Podman is running under.
-    fs::set_permissions(work_dir.join("work"), Permissions::from_mode(0o700))?;
-
-    Ok(())
-}
-
-/// Expose directory `from` read-only at `to` with the given SELinux `context`, if any, recursively
-/// applied.
-///
-/// This does *not* modify the SELinux context of `from` nor of files under `from`.
-///
-/// TODO: Is this a neat relabeling trick or simply a bad hack?
-pub fn bind_mount_dir_read_only_with_different_context(
-    from: impl AsRef<Utf8Path>,
-    to: impl AsRef<Utf8Path>,
-    context: Option<&str>,
-    scratch_dir: impl AsRef<Utf8Path>,
-) -> Result<()> {
-    fs::create_dir_all(scratch_dir.as_ref())?;
-    fs::create_dir_all(to.as_ref())?;
-
-    let mut options = format!(
-        "lowerdir={}:{}",
-        escape_path(scratch_dir),
-        escape_path(from)
-    );
-
-    if let Some(context) = context {
-        options = format!("{},context={}", options, escape_context(context));
-    }
-
-    if let Err(e) = nix::mount::mount(
-        Some("overlay"),
-        to.as_ref().as_std_path(),
-        Some("overlay"),
-        MsFlags::empty(),
-        Some(options.as_str()),
-    ) {
-        bail!(
-            "mount(\"overlay\", {:?}, \"overlay\", 0, {:?}) failed: {}",
-            to.as_ref(),
-            options,
-            e,
-        );
+    if !read_only {
+        // Make any necessary manual cleanup a bit easier by ensuring the workdir is accessible to
+        // the user that Podman is running under.
+        fs::set_permissions(
+            scratch_dir.as_ref().join("work/work"),
+            Permissions::from_mode(0o700),
+        )?;
     }
 
     Ok(())
@@ -355,7 +323,11 @@ impl VmImageInfo {
             .stdout(Stdio::piped())
             .output()?;
 
-        ensure!(output.status.success(), "`qemu-img info` failed");
+        ensure!(
+            output.status.success(),
+            "`qemu-img info` failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
 
         let mut info: VmImageInfo = serde_json::from_slice(&output.stdout)?;
         info.path = vm_image_path;
@@ -368,7 +340,7 @@ pub fn create_overlay_vm_image(
     overlay_vm_image_path: &Utf8Path,
     base_vm_image_info: &VmImageInfo,
 ) -> Result<()> {
-    let status = Command::new("qemu-img")
+    let output = Command::new("qemu-img")
         .arg("create")
         .arg("-q")
         .arg("-f")
@@ -380,10 +352,13 @@ pub fn create_overlay_vm_image(
         .arg(&base_vm_image_info.path)
         .arg(overlay_vm_image_path)
         .arg(base_vm_image_info.size.to_string())
-        .spawn()?
-        .wait()?;
+        .output()?;
 
-    ensure!(status.success(), "`qemu-img create` failed");
+    ensure!(
+        output.status.success(),
+        "`qemu-img create` failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 
     Ok(())
 }
