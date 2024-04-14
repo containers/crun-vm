@@ -5,6 +5,7 @@ mod domain;
 mod first_boot;
 mod runtime_env;
 
+use std::ffi::OsStr;
 use std::fs::{self, File, Permissions};
 use std::io::ErrorKind;
 use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
@@ -20,13 +21,12 @@ use crate::commands::create::custom_opts::CustomOptions;
 use crate::commands::create::domain::set_up_libvirt_domain_xml;
 use crate::commands::create::first_boot::FirstBootConfig;
 use crate::commands::create::runtime_env::RuntimeEnv;
-use crate::crun::crun_create;
 use crate::util::{
-    bind_mount_dir_with_different_context, bind_mount_file, create_overlay_vm_image,
+    bind_mount_dir_with_different_context, bind_mount_file, create_overlay_vm_image, crun,
     find_single_file_in_dirs, is_mountpoint, set_file_context, SpecExt, VmImageInfo,
 };
 
-pub fn create(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Create) -> Result<()> {
+pub fn create(args: &liboci_cli::Create, raw_args: &[impl AsRef<OsStr>]) -> Result<()> {
     let bundle_path: &Utf8Path = args.bundle.as_path().try_into()?;
     let config_path = bundle_path.join("config.json");
 
@@ -37,7 +37,7 @@ pub fn create(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Create) -
     let custom_options = CustomOptions::from_spec(&spec, runtime_env)?;
 
     // We include container_id in our paths to ensure no overlap with the user container's contents.
-    let priv_dir_path = original_root_path.join(format!(".crun-vm.tmp.{}", args.container_id));
+    let priv_dir_path = original_root_path.join(format!("crun-vm-{}", args.container_id));
     fs::create_dir_all(&priv_dir_path)?;
 
     if let Some(context) = spec.mount_label() {
@@ -76,7 +76,7 @@ pub fn create(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Create) -
     spec.save(&config_path)?;
     spec.save(spec.root_path()?.join("crun-vm/config.json"))?; // to aid debugging
 
-    crun_create(global_args, args)?; // actually create container
+    crun(raw_args)?; // actually create container
 
     Ok(())
 }
@@ -128,7 +128,7 @@ fn set_up_container_root(
 
         let file = Scripts::get(&path).unwrap();
         fs::write(&path_in_host, file.data)?;
-        fs::set_permissions(&path_in_host, Permissions::from_mode(0o555))?;
+        fs::set_permissions(&path_in_host, Permissions::from_mode(0o755))?;
     }
 
     // configure container entrypoint
@@ -169,9 +169,6 @@ fn set_up_vm_image(
 
     // mount user-provided VM image file into container
 
-    // TODO: Can we assume the container engine will always clean up all our mounts, since they're
-    // under the container's root?
-
     // Make VM image file available in a subtree that doesn't overlap our internal container root so
     // overlayfs works.
 
@@ -179,7 +176,7 @@ fn set_up_vm_image(
     fs::create_dir_all(&image_dir_path)?;
 
     if !image_dir_path.join("image").exists() {
-        fs::hard_link(&vm_image_path_in_host, image_dir_path.join("image"))?;
+        fs::hard_link(vm_image_path_in_host, image_dir_path.join("image"))?;
     }
 
     let mirror_vm_image_path_in_container = Utf8PathBuf::from("/crun-vm/image/image");

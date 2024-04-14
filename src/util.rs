@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use std::ffi::{c_char, CString};
+use std::ffi::{c_char, CString, OsStr};
 use std::fs::{self, OpenOptions, Permissions};
 use std::io::{self, ErrorKind};
 use std::os::unix::ffi::OsStrExt;
@@ -9,7 +9,7 @@ use std::process::{Command, Stdio};
 
 use anyhow::{anyhow, bail, ensure, Result};
 use camino::{Utf8Path, Utf8PathBuf};
-use nix::mount::MsFlags;
+use nix::mount::{MntFlags, MsFlags};
 use serde::Deserialize;
 
 pub fn set_file_context(path: impl AsRef<Utf8Path>, context: &str) -> Result<()> {
@@ -155,6 +155,14 @@ pub fn bind_mount_dir_with_different_context(
             scratch_dir.as_ref().join("work/work"),
             Permissions::from_mode(0o700),
         )?;
+    }
+
+    Ok(())
+}
+
+pub fn ensure_unmounted(path: impl AsRef<Utf8Path>) -> Result<()> {
+    while is_mountpoint(&path)? {
+        nix::mount::umount2(path.as_ref().as_std_path(), MntFlags::MNT_DETACH)?;
     }
 
     Ok(())
@@ -359,6 +367,16 @@ pub fn create_overlay_vm_image(
         "`qemu-img create` failed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
+
+    Ok(())
+}
+
+/// Run `crun`.
+///
+/// `crun` will inherit this process' standard streams.
+pub fn crun(args: impl IntoIterator<Item = impl AsRef<OsStr>>) -> Result<()> {
+    let status = Command::new("crun").args(args).spawn()?.wait()?;
+    ensure!(status.success(), "crun failed");
 
     Ok(())
 }

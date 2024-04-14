@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-use std::{
-    env,
-    fs::File,
-    io::{BufReader, BufWriter},
-};
+use std::env;
+use std::ffi::OsStr;
+use std::fs::File;
+use std::io::{BufReader, BufWriter};
 
 use anyhow::{bail, Result};
 use clap::Parser;
 
-use crate::crun::crun_exec;
+use crate::util::crun;
 
-pub fn exec(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Exec) -> Result<()> {
+pub fn exec(args: &liboci_cli::Exec, raw_args: &[impl AsRef<OsStr>]) -> Result<()> {
     assert!(args.command.is_empty());
 
     let process_config_path = args.process.as_ref().expect("process config");
@@ -28,7 +27,7 @@ pub fn exec(global_args: &liboci_cli::GlobalOpts, args: &liboci_cli::Exec) -> Re
         &process,
     )?;
 
-    crun_exec(global_args, args)?;
+    crun(raw_args)?;
 
     Ok(())
 }
