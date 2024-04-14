@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 mod commands;
-mod crun;
 mod util;
 
 use std::ffi::OsStr;
-use std::iter;
 
 use anyhow::Result;
 use clap::Parser;
-use crun::crun;
+use util::crun;
 
 // Adapted from https://github.com/containers/youki/blob/main/crates/youki/src/main.rs
 #[derive(Parser, Debug)]
@@ -22,7 +20,8 @@ struct Args {
 }
 
 // Adapted from https://github.com/containers/youki/blob/main/crates/youki/src/main.rs
-#[derive(clap::Parser, Debug)]
+#[derive(Parser, Debug)]
+#[clap(no_binary_name = true)]
 enum Command {
     #[clap(flatten)]
     Standard(Box<liboci_cli::StandardCmd>),
@@ -32,27 +31,28 @@ enum Command {
 }
 
 pub fn main(args: impl IntoIterator<Item = impl AsRef<OsStr>>) -> Result<()> {
-    let args = args
+    let raw_args = args
         .into_iter()
         .map(|a| a.as_ref().to_os_string())
         .collect::<Vec<_>>();
 
-    let parsed_args =
-        Args::parse_from(iter::once(&OsStr::new("crun-vm").to_os_string()).chain(&args));
+    let parsed_args = Args::parse_from(&raw_args);
 
     match parsed_args.command {
         Command::Standard(cmd) => {
             if let liboci_cli::StandardCmd::Create(create_args) = *cmd {
-                return commands::create::create(&parsed_args.global, &create_args);
+                return commands::create::create(&create_args, &raw_args);
+            } else if let liboci_cli::StandardCmd::Delete(delete_args) = *cmd {
+                return commands::delete::delete(&delete_args, &raw_args);
             }
         }
         Command::Common(cmd) => {
             if let liboci_cli::CommonCmd::Exec(exec_args) = *cmd {
-                return commands::exec::exec(&parsed_args.global, &exec_args);
+                return commands::exec::exec(&exec_args, &raw_args);
             }
         }
     }
 
     // not a command we implement ourselves, just pass it on to crun
-    crun(&args)
+    crun(&raw_args)
 }
