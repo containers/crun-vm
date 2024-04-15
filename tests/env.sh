@@ -377,6 +377,9 @@ run)
                 __skip() {
                     exit 0
                 }
+                __log() {
+                    __small_log 36 \"\$@\"
+                }
                 TEMP_DIR=~/$label.temp
                 UTIL_DIR=~/$label.util
                 ENGINE=$engine
