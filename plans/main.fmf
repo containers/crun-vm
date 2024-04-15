@@ -13,7 +13,6 @@ prepare:
     execute:
         how: tmt
         script: |
-            cargo install nextest
             PATH=$PATH:/root/.cargo/bin make unit
 
 /validate_test:
