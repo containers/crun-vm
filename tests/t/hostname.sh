@@ -7,15 +7,17 @@ for os in fedora coreos; do
 
     # default hostname
 
-    __engine run \
-        --rm --detach \
-        --name "hostname-$os-default" \
-        "$image" \
-        ""
+    id=$(
+        __engine run \
+            --rm --detach \
+            --name "hostname-$os-default" \
+            "$image" \
+            ""
+        )
 
     __test() {
         __engine exec "hostname-$os-default" --as "$user" \
-            "set -x && [[ \$( hostname ) == ${LAST_RUN_ID::12} ]]"
+            "set -x && [[ \$( hostname ) == ${id::12} ]]"
     }
 
     __test
