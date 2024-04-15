@@ -69,14 +69,14 @@ __elapsed() {
 # Usage: __small_log_without_time <color> <format> <args...>
 __small_log_without_time() {
     # shellcheck disable=SC2059
-    printf "\033[%sm--- %s\033[0m\n" \
+    >&2 printf "\033[%sm--- %s\033[0m\n" \
         "$1" "$( printf "${@:2}" )"
 }
 
 # Usage: __log <color> <format> <args...>
 __small_log() {
     # shellcheck disable=SC2059
-    printf "\033[%sm--- [%6.1f] %s\033[0m\n" \
+    >&2 printf "\033[%sm--- [%6.1f] %s\033[0m\n" \
         "$1" "$( __elapsed )" "$( printf "${@:2}" )"
 }
 
@@ -86,8 +86,8 @@ __big_log() {
     text="$( printf "${@:2}" )"
     term_cols="$( tput cols 2> /dev/null )" || term_cols=80
     sep_len="$(( term_cols - ${#text} - 16 ))"
-    printf "\033[%sm--- [%6.1f] %s " "$1" "$( __elapsed )" "${text}"
-    printf '%*s\033[0m\n' "$(( sep_len < 0 ? 0 : sep_len ))" '' | tr ' ' -
+    >&2 printf "\033[%sm--- [%6.1f] %s " "$1" "$( __elapsed )" "${text}"
+    >&2 printf '%*s\033[0m\n' "$(( sep_len < 0 ? 0 : sep_len ))" '' | tr ' ' -
 }
 
 __log_without_time_and_run() {
@@ -339,16 +339,11 @@ run)
             # shellcheck disable=SC2317
             __engine() {
                 if [[ "$1" == run ]]; then
-                    __command=(
-                        "${engine_cmd[@]}" run
-                        --runtime "$runtime_in_env"
-                        --pull never
-                        --label "$label"
+                    __log_and_run "${engine_cmd[@]}" run \
+                        --runtime "$runtime_in_env" \
+                        --pull never \
+                        --label "$label" \
                         "${@:2}"
-                    )
-                    __small_log 36 '$ %s' "${__command[*]}"
-                    # shellcheck disable=SC2034
-                    LAST_RUN_ID=$( "${__command[@]}" )
                 else
                     __log_and_run "${engine_cmd[@]}" "$@"
                 fi
