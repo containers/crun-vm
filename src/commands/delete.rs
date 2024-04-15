@@ -45,7 +45,7 @@ fn get_root_path(container_id: &str) -> Result<Utf8PathBuf> {
     let output = Command::new("crun")
         .arg("state")
         .arg(container_id)
-        .stderr(Stdio::inherit())
+        .stderr(Stdio::null())
         .output()?;
 
     ensure!(output.status.success());
