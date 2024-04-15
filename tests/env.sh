@@ -237,8 +237,7 @@ start)
         --rm -dit \
         -v "$temp_dir":/home/fedora/images:z \
         -v "$repo_root/target":/home/fedora/target:z \
-        "$env_image" \
-        ""
+        "$env_image"
 
     # shellcheck disable=SC2317
     __extra_cleanup() {

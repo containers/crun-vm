@@ -18,4 +18,5 @@ image_path_in_container=/disk/$( basename "${vm_image_file}" )
 podman image build --file=- --tag="${container_image_tag}" / <<EOF
 FROM scratch
 COPY ${abs_vm_image_file@Q} ${image_path_in_container@Q}
+ENTRYPOINT ["no-entrypoint"]
 EOF
