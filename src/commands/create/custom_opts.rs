@@ -67,14 +67,20 @@ pub struct CustomOptions {
 
 impl CustomOptions {
     pub fn from_spec(spec: &oci_spec::runtime::Spec, env: RuntimeEnv) -> Result<Self> {
-        let args = spec
+        let mut args: Vec<&String> = spec
             .process()
             .as_ref()
             .unwrap()
             .args()
             .iter()
             .flatten()
-            .filter(|arg| !arg.trim().is_empty());
+            .collect();
+
+        if let Some(&first_arg) = args.first() {
+            if first_arg.trim().is_empty() || first_arg == "no-entrypoint" {
+                args.remove(0);
+            }
+        }
 
         // TODO: We currently assume that no entrypoint is given (either by being set by in the
         // container image or through --entrypoint). Must somehow find whether the first arg is the
