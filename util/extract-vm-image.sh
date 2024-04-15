@@ -29,6 +29,8 @@ elif (( ${#candidates[@]} > 1 )); then
     exit 1
 fi
 
+>&2 echo "Extracting ${candidates[0]}"
+
 tar -C "${temp_dir}" -xf "${temp_dir}/root.tar" "${candidates[0]}"
 chmod +w "${temp_dir}/${candidates[0]}"
 
