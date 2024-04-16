@@ -5,12 +5,13 @@ mod util;
 
 use std::ffi::OsStr;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use clap::Parser;
 use util::crun;
 
 // Adapted from https://github.com/containers/youki/blob/main/crates/youki/src/main.rs
 #[derive(Parser, Debug)]
+#[clap(no_binary_name = true)]
 struct Args {
     #[clap(flatten)]
     global: liboci_cli::GlobalOpts,
@@ -21,7 +22,6 @@ struct Args {
 
 // Adapted from https://github.com/containers/youki/blob/main/crates/youki/src/main.rs
 #[derive(Parser, Debug)]
-#[clap(no_binary_name = true)]
 enum Command {
     #[clap(flatten)]
     Standard(Box<liboci_cli::StandardCmd>),
@@ -40,19 +40,34 @@ pub fn main(args: impl IntoIterator<Item = impl AsRef<OsStr>>) -> Result<()> {
 
     match parsed_args.command {
         Command::Standard(cmd) => {
-            if let liboci_cli::StandardCmd::Create(create_args) = *cmd {
-                return commands::create::create(&create_args, &raw_args);
-            } else if let liboci_cli::StandardCmd::Delete(delete_args) = *cmd {
-                return commands::delete::delete(&delete_args, &raw_args);
+            match *cmd {
+                liboci_cli::StandardCmd::Create(args) => commands::create::create(&args, &raw_args),
+                liboci_cli::StandardCmd::Delete(args) => commands::delete::delete(&args, &raw_args),
+                liboci_cli::StandardCmd::Start(_)
+                | liboci_cli::StandardCmd::State(_)
+                | liboci_cli::StandardCmd::Kill(_) => {
+                    // not a command we implement ourselves, pass it on to crun
+                    crun(&raw_args)
+                }
             }
         }
         Command::Common(cmd) => {
-            if let liboci_cli::CommonCmd::Exec(exec_args) = *cmd {
-                return commands::exec::exec(&exec_args, &raw_args);
+            match *cmd {
+                liboci_cli::CommonCmd::Exec(args) => commands::exec::exec(&args, &raw_args),
+                liboci_cli::CommonCmd::Checkpointt(_)
+                | liboci_cli::CommonCmd::Events(_)
+                | liboci_cli::CommonCmd::Features(_)
+                | liboci_cli::CommonCmd::List(_)
+                | liboci_cli::CommonCmd::Pause(_)
+                | liboci_cli::CommonCmd::Ps(_)
+                | liboci_cli::CommonCmd::Resume(_)
+                | liboci_cli::CommonCmd::Run(_)
+                | liboci_cli::CommonCmd::Update(_)
+                | liboci_cli::CommonCmd::Spec(_) => {
+                    // not a command we support
+                    bail!("Unknown command")
+                }
             }
         }
     }
-
-    // not a command we implement ourselves, just pass it on to crun
-    crun(&raw_args)
 }
