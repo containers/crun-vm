@@ -74,17 +74,22 @@ impl CustomOptions {
             .args()
             .iter()
             .flatten()
+            .filter(|a| !a.trim().is_empty())
             .collect();
 
         if let Some(&first_arg) = args.first() {
-            if first_arg.trim().is_empty() || first_arg == "no-entrypoint" {
+            if first_arg == "no-entrypoint" {
                 args.remove(0);
             }
         }
 
-        // TODO: We currently assume that no entrypoint is given (either by being set by in the
-        // container image or through --entrypoint). Must somehow find whether the first arg is the
-        // entrypoint and ignore it in that case.
+        if let Some(&first_arg) = args.first() {
+            ensure!(
+                first_arg.starts_with("-"),
+                "unexpected entrypoint '{first_arg}' found; use an image without an entrypoint or with entrypoint \"no-entrypoint\", and/or pass in an empty \"\" entrypoint on the command line"
+            );
+        }
+
         let mut options = CustomOptions::parse_from(
             iter::once(&"podman run [<podman-opts>] <image>".to_string()).chain(args),
         );
