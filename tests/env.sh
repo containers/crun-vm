@@ -279,6 +279,7 @@ stop)
     fi
 
     __log_and_run podman stop --ignore "$container_name"
+    __log_and_run podman wait --ignore "$container_name"
     ;;
 
 run)
