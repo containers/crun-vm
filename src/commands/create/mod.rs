@@ -85,7 +85,8 @@ pub fn create(args: &liboci_cli::Create, raw_args: &[impl AsRef<OsStr>]) -> Resu
     set_up_security(&mut spec);
 
     if is_first_create {
-        let ssh_pub_key = set_up_ssh_key_pair(&mut spec, runtime_env, &priv_dir_path)?;
+        let ssh_pub_key =
+            set_up_ssh_key_pair(&mut spec, &custom_options, runtime_env, &priv_dir_path)?;
 
         set_up_first_boot_config(&spec, &mounts, &custom_options, &ssh_pub_key)?;
         set_up_libvirt_domain_xml(&spec, &base_vm_image_info, &mounts, &custom_options)?;
@@ -601,6 +602,7 @@ fn set_up_first_boot_config(
 /// cloud-init but the user injected their public key into it themselves.
 fn set_up_ssh_key_pair(
     spec: &mut oci_spec::runtime::Spec,
+    custom_options: &CustomOptions,
     env: RuntimeEnv,
     priv_dir_path: &Utf8Path,
 ) -> Result<String> {
@@ -612,11 +614,13 @@ fn set_up_ssh_key_pair(
     let container_ssh_dir = spec.root_path()?.join("root/.ssh");
 
     // Use the host user's key pair if:
+    //   - The user didn't set the --random-ssh-key-pair flag; and
     //   - We're not running under Docker (otherwise we'd probably not be running as the user that
     //     invoked the engine); and
     //   - We're not running under Kubernetes (where there isn't a "host user"); and
     //   - They have a key pair.
-    let use_user_key_pair = env == RuntimeEnv::Other
+    let use_user_key_pair = !custom_options.random_ssh_key_pair
+        && env == RuntimeEnv::Other
         && user_ssh_dir.join("id_rsa.pub").is_file()
         && user_ssh_dir.join("id_rsa").is_file();
 

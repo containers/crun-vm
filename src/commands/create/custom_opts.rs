@@ -50,6 +50,9 @@ pub struct CustomOptions {
     pub persistent: bool,
 
     #[clap(long)]
+    pub random_ssh_key_pair: bool,
+
+    #[clap(long)]
     pub cloud_init: Option<Utf8PathBuf>,
 
     #[clap(long)]
