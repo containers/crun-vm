@@ -33,6 +33,24 @@ pub fn create(args: &liboci_cli::Create, raw_args: &[impl AsRef<OsStr>]) -> Resu
     let mut spec = oci_spec::runtime::Spec::load(&config_path)?;
     let original_root_path: Utf8PathBuf = spec.root_path()?.canonicalize()?.try_into()?; // ensure absolute
 
+    if let Some(process) = spec.process().as_ref() {
+        if let Some(capabilities) = process.capabilities().as_ref() {
+            fn any_is_cap_sys_admin(caps: &Option<oci_spec::runtime::Capabilities>) -> bool {
+                caps.as_ref()
+                    .is_some_and(|set| set.contains(&oci_spec::runtime::Capability::SysAdmin))
+            }
+
+            ensure!(
+                !any_is_cap_sys_admin(capabilities.bounding())
+                    && !any_is_cap_sys_admin(capabilities.effective())
+                    && !any_is_cap_sys_admin(capabilities.inheritable())
+                    && !any_is_cap_sys_admin(capabilities.permitted())
+                    && !any_is_cap_sys_admin(capabilities.ambient()),
+                "crun-vm should not be used with --privileged"
+            );
+        }
+    }
+
     let runtime_env = RuntimeEnv::current(&spec, &original_root_path)?;
     let custom_options = CustomOptions::from_spec(&spec, runtime_env)?;
 
