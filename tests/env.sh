@@ -395,6 +395,9 @@ run)
 
             full_script="\
                 set -o errexit -o pipefail -o nounset
+                ${engine_cmd[*]} ps --filter label=$label --format '{{.Names}}' |
+                    xargs --no-run-if-empty ${engine_cmd[*]} stop --time 0 \
+                    >/dev/null 2>&1
                 ${engine_cmd[*]} ps --filter label=$label --format '{{.Names}}' --all |
                     xargs --no-run-if-empty ${engine_cmd[*]} rm --force
                 sudo rm -fr $label.temp $label.util
