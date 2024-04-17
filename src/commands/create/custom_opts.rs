@@ -88,7 +88,7 @@ impl CustomOptions {
 
         if let Some(&first_arg) = args.first() {
             ensure!(
-                first_arg.starts_with("-"),
+                first_arg.starts_with('-'),
                 "unexpected entrypoint '{first_arg}' found; use an image without an entrypoint or with entrypoint \"no-entrypoint\", and/or pass in an empty \"\" entrypoint on the command line"
             );
         }
