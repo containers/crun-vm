@@ -46,7 +46,7 @@ pub fn create(args: &liboci_cli::Create, raw_args: &[impl AsRef<OsStr>]) -> Resu
                     && !any_is_cap_sys_admin(capabilities.inheritable())
                     && !any_is_cap_sys_admin(capabilities.permitted())
                     && !any_is_cap_sys_admin(capabilities.ambient()),
-                "crun-vm should not be used with --privileged"
+                "crun-vm is incompatible with privileged containers"
             );
         }
     }
