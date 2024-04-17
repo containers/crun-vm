@@ -97,6 +97,11 @@ impl CustomOptions {
             iter::once(&"podman run [<podman-opts>] <image>".to_string()).chain(args),
         );
 
+        ensure!(
+            !spec.root().as_ref().unwrap().readonly().unwrap_or(false) || !options.persistent,
+            "--persistent was set but the container's root file system was mounted as read-only"
+        );
+
         fn all_are_absolute(iter: impl IntoIterator<Item = impl AsRef<Utf8Path>>) -> bool {
             iter.into_iter().all(|p| p.as_ref().is_absolute())
         }

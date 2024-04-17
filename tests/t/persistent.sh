@@ -7,13 +7,16 @@ fi
 
 "$UTIL_DIR/extract-vm-image.sh" "${TEST_IMAGES[fedora]}" "$TEMP_DIR/image"
 
+# Usage: __run <crun_vm_option> [<extra_podman_options...>]
+__run() {
+    __engine run --rm --detach --name persistent "${@:2}" --rootfs "$TEMP_DIR" "$1"
+}
+
+# Usage: __test <crun_vm_option> <condition>
 __test() {
-    id=$( __engine run --detach --name persistent --rootfs "$TEMP_DIR" "$1" )
-
+    id=$( __run "$1" )
     __engine exec persistent --as fedora "$2"
-
     __engine stop persistent
-    __engine rm persistent
 
     if [[ "$ENGINE" != rootful-podman ]]; then
         # ensure user that invoked `engine run` can delete crun-vm state
@@ -25,3 +28,10 @@ __test ""           '[[ ! -e i-was-here ]] && touch i-was-here'
 __test --persistent '[[ ! -e i-was-here ]] && touch i-was-here'
 __test --persistent '[[ -e i-was-here ]]'
 __test ""           '[[ -e i-was-here ]]'
+
+# ensure --persistent is rejected iff the rootfs is configured as read-only
+
+! __run --persistent --read-only
+
+__run "" --read-only
+__engine exec persistent --as fedora
