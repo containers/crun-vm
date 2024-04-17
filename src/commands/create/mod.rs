@@ -12,7 +12,7 @@ use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 use std::path::Path;
 use std::process::Command;
 
-use anyhow::{bail, ensure, Context, Result};
+use anyhow::{anyhow, bail, ensure, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use nix::sys::stat::{major, makedev, minor, mknod, Mode, SFlag};
 use rust_embed::RustEmbed;
@@ -85,7 +85,9 @@ pub fn create(args: &liboci_cli::Create, raw_args: &[impl AsRef<OsStr>]) -> Resu
     set_up_security(&mut spec);
 
     if is_first_create {
-        set_up_first_boot_config(&spec, &mounts, &custom_options, runtime_env)?;
+        let ssh_pub_key = set_up_ssh_key_pair(&mut spec, runtime_env, &priv_dir_path)?;
+
+        set_up_first_boot_config(&spec, &mounts, &custom_options, &ssh_pub_key)?;
         set_up_libvirt_domain_xml(&spec, &base_vm_image_info, &mounts, &custom_options)?;
     }
 
@@ -566,13 +568,11 @@ fn set_up_first_boot_config(
     spec: &oci_spec::runtime::Spec,
     mounts: &Mounts,
     custom_options: &CustomOptions,
-    env: RuntimeEnv,
+    container_public_key: &str,
 ) -> Result<()> {
-    let container_public_key = get_container_ssh_key_pair(spec, env)?;
-
     let config = FirstBootConfig {
         hostname: spec.hostname().as_deref(),
-        container_public_key: &container_public_key,
+        container_public_key,
         password: custom_options.password.as_deref(),
         mounts,
     };
@@ -597,48 +597,59 @@ fn set_up_first_boot_config(
 
 /// Returns the public key for the container.
 ///
-/// This first attempts to use the current user's key pair, in case the VM does not support
+/// This first attempts to use the current user's key pair, just in case the VM does not support
 /// cloud-init but the user injected their public key into it themselves.
-fn get_container_ssh_key_pair(spec: &oci_spec::runtime::Spec, env: RuntimeEnv) -> Result<String> {
-    let ssh_path = spec.root_path()?.join("root/.ssh");
+fn set_up_ssh_key_pair(
+    spec: &mut oci_spec::runtime::Spec,
+    env: RuntimeEnv,
+    priv_dir_path: &Utf8Path,
+) -> Result<String> {
+    let user_home: Utf8PathBuf = home::home_dir()
+        .ok_or_else(|| anyhow!("could not determine user home"))?
+        .try_into()?;
 
-    if !ssh_path.join("id_rsa.pub").exists() {
-        fs::create_dir_all(&ssh_path)?;
+    let user_ssh_dir = user_home.join(".ssh");
+    let container_ssh_dir = spec.root_path()?.join("root/.ssh");
 
-        let try_copy_user_key_pair = || -> Result<bool> {
-            if env != RuntimeEnv::Other {
-                // definitely not Podman, we're probably not running as the user that invoked the engine
-                return Ok(false);
-            }
+    // Use the host user's key pair if:
+    //   - We're not running under Docker (otherwise we'd probably not be running as the user that
+    //     invoked the engine); and
+    //   - We're not running under Kubernetes (where there isn't a "host user"); and
+    //   - They have a key pair.
+    let use_user_key_pair = env == RuntimeEnv::Other
+        && user_ssh_dir.join("id_rsa.pub").is_file()
+        && user_ssh_dir.join("id_rsa").is_file();
 
-            if let Some(user_home_path) = home::home_dir() {
-                let user_ssh = user_home_path.join(".ssh");
+    if use_user_key_pair {
+        // use host user's key pair
 
-                if user_ssh.join("id_rsa.pub").is_file() && user_ssh.join("id_rsa").is_file() {
-                    fs::copy(user_ssh.join("id_rsa.pub"), ssh_path.join("id_rsa.pub"))?;
-                    fs::copy(user_ssh.join("id_rsa"), ssh_path.join("id_rsa"))?;
-                    return Ok(true);
-                }
-            }
+        bind_mount_dir_with_different_context(
+            &user_ssh_dir,
+            &container_ssh_dir,
+            priv_dir_path.join("scratch-ssh"),
+            spec.mount_label(),
+            true,
+        )?;
+    } else {
+        // use new key pair
 
-            Ok(false)
-        };
+        fs::create_dir_all(&container_ssh_dir)?;
 
-        if !try_copy_user_key_pair()? {
-            let status = Command::new("ssh-keygen")
-                .arg("-q")
-                .arg("-f")
-                .arg(ssh_path.join("id_rsa"))
-                .arg("-N")
-                .arg("")
-                .spawn()?
-                .wait()?;
+        let status = Command::new("ssh-keygen")
+            .arg("-q")
+            .arg("-f")
+            .arg(container_ssh_dir.join("id_rsa"))
+            .arg("-N")
+            .arg("")
+            .arg("-C")
+            .arg("")
+            .spawn()?
+            .wait()?;
 
-            ensure!(status.success(), "ssh-keygen failed");
-        }
+        ensure!(status.success(), "ssh-keygen failed");
     }
 
-    Ok(fs::read_to_string(ssh_path.join("id_rsa.pub"))?)
+    Ok(fs::read_to_string(container_ssh_dir.join("id_rsa.pub"))?)
 }
 
 fn adjust_container_rlimits_and_resources(spec: &mut oci_spec::runtime::Spec) {

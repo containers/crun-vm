@@ -31,9 +31,11 @@ pub fn delete(args: &liboci_cli::Delete, raw_args: &[impl AsRef<OsStr>]) -> Resu
             .to_path_buf()
             .try_into()?;
 
+        let ssh_dir_path = private_dir_path.join("root/root/.ssh");
+        ensure_unmounted(ssh_dir_path)?;
+
         let image_dir_path = private_dir_path.join("root/crun-vm/image");
         let image_file_path = image_dir_path.join("image");
-
         ensure_unmounted(image_file_path)?;
         ensure_unmounted(image_dir_path)?;
     }
