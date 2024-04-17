@@ -151,9 +151,12 @@ fn set_up_container_root(
 
     // configure container entrypoint
 
-    let command = match custom_options.print_libvirt_xml {
-        true => vec!["cat", "/crun-vm/domain.xml"],
-        false => vec!["/crun-vm/entrypoint.sh"],
+    let command = if custom_options.print_libvirt_xml {
+        vec!["cat", "/crun-vm/domain.xml"]
+    } else if custom_options.print_config_json {
+        vec!["cat", "/crun-vm/config.json"]
+    } else {
+        vec!["/crun-vm/entrypoint.sh"]
     };
 
     spec.set_process({

@@ -63,6 +63,9 @@ pub struct CustomOptions {
 
     #[clap(long)]
     pub print_libvirt_xml: bool,
+
+    #[clap(long, conflicts_with = "print_libvirt_xml")]
+    pub print_config_json: bool,
 }
 
 impl CustomOptions {
