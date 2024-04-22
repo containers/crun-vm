@@ -23,7 +23,8 @@ use crate::commands::create::first_boot::FirstBootConfig;
 use crate::commands::create::runtime_env::RuntimeEnv;
 use crate::util::{
     bind_mount_dir_with_different_context, bind_mount_file, create_overlay_vm_image, crun,
-    find_single_file_in_dirs, is_mountpoint, set_file_context, SpecExt, VmImageInfo,
+    find_single_file_in_dirs, fix_selinux_label, is_mountpoint, set_file_context, SpecExt,
+    VmImageInfo,
 };
 
 pub fn create(args: &liboci_cli::Create, raw_args: &[impl AsRef<OsStr>]) -> Result<()> {
@@ -174,9 +175,13 @@ fn set_up_container_root(
 
     spec.set_process({
         let mut process = spec.process().clone().unwrap();
+
         process.set_cwd(".".into());
         process.set_command_line(None);
         process.set_args(Some(command.into_iter().map(String::from).collect()));
+
+        fix_selinux_label(&mut process);
+
         Some(process)
     });
 
