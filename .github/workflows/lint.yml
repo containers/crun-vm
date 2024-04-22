@@ -24,3 +24,21 @@ jobs:
 
       - name: Lint
         run: ./lint.sh
+
+  minimal-dependency-versions:
+    name: Validate minimal dependency versions
+    runs-on: ubuntu-latest
+    steps:
+
+      - uses: actions/checkout@v4
+
+      - name: Set Rust version
+        run: rustup default 1.74
+
+      - name: Install cargo-hack and cargo-minimal-versions
+        run: |
+          rustup toolchain add nightly &&
+          cargo +nightly install cargo-hack cargo-minimal-versions --locked
+
+      - name: Validate minimal dependency versions
+        run: cargo minimal-versions check --workspace
