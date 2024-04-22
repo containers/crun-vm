@@ -3,7 +3,7 @@
 
 set -o errexit -o pipefail -o nounset
 
-start_time="$( date +%s.%N )"
+start_time="$( date +%s%N )"
 
 env_image_base=quay.io/containerdisks/fedora:39
 env_image=quay.io/crun-vm/test-env:latest
@@ -63,7 +63,8 @@ COMMANDS
 
 # Usage: __elapsed
 __elapsed() {
-    bc -l <<< "$( date +%s.%N ) - ${start_time}"
+    # shellcheck disable=SC2001
+    sed 's/\(.\{9\}\)$/.\1/' <<< "$(( $( date +%s%N ) - start_time ))"
 }
 
 # Usage: __small_log_without_time <color> <format> <args...>
@@ -168,7 +169,6 @@ build)
     __exec sudo dnf update -y
     __exec sudo dnf install -y \
         bash \
-        bc \
         coreutils \
         crun \
         docker \
