@@ -87,7 +87,14 @@ impl CustomOptions {
             .collect();
 
         if let Some(&first_arg) = args.first() {
-            if first_arg == "no-entrypoint" {
+            let ignore = [
+                "no-entrypoint",
+                "/sbin/init",
+                "/usr/sbin/init",
+                "/usr/local/sbin/init",
+            ];
+
+            if ignore.contains(&first_arg.as_str()) {
                 args.remove(0);
             }
         }

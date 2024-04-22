@@ -6,11 +6,30 @@ use std::io::{self, ErrorKind};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::process::{Command, Stdio};
+use std::str;
 
 use anyhow::{anyhow, bail, ensure, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use nix::mount::{MntFlags, MsFlags};
 use serde::Deserialize;
+
+// When the container image's entrypoint is /sbin/init or similar, Podman gives the entrypoint (and
+// exec entrypoint) process an SELinux label of, for instance:
+//
+//     system_u:system_r:container_init_t:s0:c276,c638
+//
+// However, we are going to change our entrypoint to something else, so we need to use the
+// "standard" label that Podman otherwise gives, which in this case would be:
+//
+//     system_u:system_r:container_t:s0:c276,c638
+//
+// This function performs that mapping.
+pub fn fix_selinux_label(process: &mut oci_spec::runtime::Process) {
+    if let Some(label) = process.selinux_label() {
+        let new_label = label.replace("container_init_t", "container_t");
+        process.set_selinux_label(Some(new_label));
+    }
+}
 
 pub fn set_file_context(path: impl AsRef<Utf8Path>, context: &str) -> Result<()> {
     extern "C" {
