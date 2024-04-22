@@ -4,9 +4,16 @@ prepare:
       package:
         - cargo
         - clippy
+        - guestfs-tools
+        - libselinux-devel
         - make
         - podman
+        - qemu-img
         - rustfmt
+    - name: Set up libvirt
+      how: shell
+      script:
+        - sudo systemctl start virtqemud
 
 /unit_test:
     summary: Run unit tests
