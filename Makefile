@@ -79,4 +79,4 @@ code_coverage: $(CARGO_TARGET_DIR)
 
 .PHONY: validate
 validate: $(CARGO_TARGET_DIR)
-	$(SHELL) lint.sh
+	$(SHELL) tests/lint.sh

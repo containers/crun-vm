@@ -23,7 +23,7 @@ jobs:
         run: rustup component add rustfmt clippy
 
       - name: Lint
-        run: ./lint.sh
+        run: tests/lint.sh
 
   minimal-dependency-versions:
     name: Validate minimal dependency versions
