@@ -5,7 +5,7 @@ set -o errexit -o pipefail -o nounset
 
 start_time="$( date +%s%N )"
 
-env_image_base=quay.io/containerdisks/fedora:40
+env_image_base=${CRUN_VM_TEST_ENV_BASE_IMAGE:-"quay.io/containerdisks/fedora:40"}
 env_image=quay.io/crun-vm/test-env:latest
 container_name=crun-vm-test-env
 

@@ -38,3 +38,24 @@ jobs:
     owner: rhcontainerbot
     project: podman-next
     enable_net: true
+
+  - &tests
+    job: tests
+    trigger: pull_request
+    skip_build: true
+    enable_net: true
+    targets:
+      # TODO: Replace these three with fedora-all-x86_64 once Fedora 38 is gone.
+      - fedora-rawhide-x86_64
+      - fedora-40-x86_64
+      - fedora-39-x86_64
+    identifier: docker
+    tmt_plan: /tests/docker
+
+  - <<: *tests
+    identifier: podman
+    tmt_plan: /tests/podman
+
+  - <<: *tests
+    identifier: rootful-podman
+    tmt_plan: /tests/rootful-podman
