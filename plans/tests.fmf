@@ -1,0 +1,58 @@
+provision:
+  hardware:
+    virtualization:
+      is-supported: true
+
+prepare:
+  - name: Install dependencies
+    how: install
+    package:
+      - bash
+      - cargo
+      - coreutils
+      - crun
+      - crun-krun
+      - docker
+      - genisoimage
+      - grep
+      - guestfs-tools
+      - libselinux-devel
+      - libvirt-client
+      - libvirt-daemon-driver-qemu
+      - openssh
+      - openssh-clients
+      - passt
+      - podman
+      - qemu-img
+      - qemu-system-aarch64-core
+      - qemu-system-x86-core
+      - sed
+      - util-linux
+      - virtiofsd
+
+execute:
+  how: tmt
+  script: |
+    set -ex
+    export PATH=$PATH:/root/.cargo/bin
+    export LIBGUESTFS_BACKEND=direct
+    tag=$( awk -F= '/^VERSION_ID=/ {print tolower($2)}' /etc/os-release )
+    export CRUN_VM_TEST_ENV_BASE_IMAGE=quay.io/containerdisks/fedora:$tag
+    tests/env.sh build
+    tests/env.sh start
+    tests/env.sh run "$ENGINE" all
+
+/docker:
+  summary: Run all tests under Docker
+  environment:
+    ENGINE: docker
+
+/podman:
+  summary: Run all tests under Podman
+  environment:
+    ENGINE: podman
+
+/rootful-podman:
+  summary: Run all tests under Rootful Podman
+  environment:
+    ENGINE: rootful-podman

@@ -5,7 +5,7 @@ set -o errexit -o pipefail -o nounset
 
 start_time="$( date +%s%N )"
 
-env_image_base=quay.io/containerdisks/fedora:40
+env_image_base=${CRUN_VM_TEST_ENV_BASE_IMAGE:-"quay.io/containerdisks/fedora:40"}
 env_image=quay.io/crun-vm/test-env:latest
 container_name=crun-vm-test-env
 
@@ -155,6 +155,12 @@ build)
         ;;
     aarch64)
         root_part=/dev/sda3
+
+        # enable nested virt
+        virt-customize \
+            --add "$temp_dir/image" \
+            --append-line '/etc/default/grub:GRUB_CMDLINE_LINUX_DEFAULT="kvm-arm.mode=nested"' \
+            --run-command 'grub2-mkconfig -o /boot/grub2/grub.cfg'
         ;;
     esac
 
@@ -173,9 +179,14 @@ build)
         --name "$container_name-build" \
         --runtime "$runtime" \
         --memory 8g \
-        --rm -dit \
+        --rm -it \
         --rootfs "$temp_dir" \
-        --persistent
+        --persistent &
+
+    sleep 120
+    kill %1
+    wait
+    exit 42
 
     # shellcheck disable=SC2317
     __extra_cleanup() {
