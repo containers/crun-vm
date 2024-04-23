@@ -59,7 +59,7 @@ fn build_command(original_command: &Vec<String>) -> Result<Vec<String>> {
             None => bail!("env var CRUN_VM_EXEC_TIMEOUT has invalid value"),
         }
     } else {
-        60
+        0
     };
 
     if args.command.starts_with(&["".to_string()]) {
