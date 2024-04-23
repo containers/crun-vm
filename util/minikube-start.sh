@@ -3,7 +3,7 @@
 
 set -o errexit -o pipefail -o nounset
 
-script_dir="$( dirname "$0" | xargs readlink -e )"
+repo_root=$( readlink -e "$( dirname "$0" )/.." )
 
 __minikube() {
     minikube -p=crun-vm-example "$@"
@@ -57,7 +57,7 @@ __ssh 'tee --append /etc/crio/crio.conf <<EOF
 runtime_path = "/usr/local/bin/crun-vm"
 EOF'
 
-__cp "${script_dir}/../../target/debug/crun-vm" /usr/local/bin/crun-vm
+__cp "${repo_root}/target/debug/crun-vm" /usr/local/bin/crun-vm
 __ssh chmod +x /usr/local/bin/crun-vm
 
 # reload cluster so that the new runtime is picked up

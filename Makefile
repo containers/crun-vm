@@ -7,30 +7,35 @@ CARGO      ?= cargo
 SELINUXOPT ?= $(shell test -x /usr/sbin/selinuxenabled && selinuxenabled && echo -Z)
 
 binpath := $(DESTDIR)/$(PREFIX)/bin/crun-vm
+manpath := $(DESTDIR)/$(PREFIX)/share/man/man1/crun-vm.1.gz
 
-.PHONY: build
-build:
+all: out/crun-vm out/crun-vm.1.gz
+
+.PHONY: out/crun-vm
+out/crun-vm:
+	mkdir -p $(@D)
 	$(CARGO) build --release
-	mkdir -p bin
-	cp target/release/crun-vm bin/crun-vm
+	cp target/release/crun-vm $@
 
-.PHONY: build-debug
-build-debug:
-	$(CARGO) build
-	mkdir -p bin
-	cp target/debug/crun-vm bin/crun-vm.debug
+out/crun-vm.1.gz: docs/5-crun-vm.1.ronn
+	mkdir -p $(@D)
+	ronn --pipe --roff $< | gzip > $@
 
 .PHONY: clean
 clean:
-	rm -fr bin target
+	rm -fr out target
 
 .PHONY: install
-install: build
-	install ${SELINUXOPT} -D -m 0755 bin/crun-vm $(binpath)
+install: out/crun-vm install-man
+	install ${SELINUXOPT} -D -m 0755 $< $(binpath)
+
+.PHONY: install-man
+install-man: out/crun-vm.1.gz
+	install ${SELINUXOPT} -D -m 0644 $< $(manpath)
 
 .PHONY: uninstall
 uninstall:
-	rm -f $(binpath)
+	rm -f $(binpath) $(manpath)
 
 .PHONY: lint
 lint:
