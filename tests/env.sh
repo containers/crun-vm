@@ -64,7 +64,7 @@ COMMANDS
 # Usage: __elapsed
 __elapsed() {
     # shellcheck disable=SC2001
-    sed 's/\(.\{9\}\)$/.\1/' <<< "$(( $( date +%s%N ) - start_time ))"
+    sed 's/^0*\(..*\)\(.\{9\}\)$/\1.\2/' <<< "000000000$(( $( date +%s%N ) - start_time ))"
 }
 
 # Usage: __small_log_without_time <color> <format> <args...>
@@ -107,13 +107,14 @@ __rel() {
 
 __build_runtime() {
     __big_log 33 'Building crun-vm...'
-    __log_and_run cargo build --manifest-path "$( __rel "$repo_root/Cargo.toml" )"
+    __log_and_run cargo build
     runtime=$repo_root/target/debug/crun-vm
 }
 
 __extra_cleanup() { :; }
 
 repo_root=$( readlink -e "$( dirname "$0" )/.." )
+cd "$repo_root"
 
 temp_dir=$( mktemp -d )
 trap '__extra_cleanup; rm -fr "$temp_dir"' EXIT
