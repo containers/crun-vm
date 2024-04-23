@@ -64,7 +64,9 @@ COMMANDS
 # Usage: __elapsed
 __elapsed() {
     # shellcheck disable=SC2001
-    sed 's/^0*\(..*\)\(.\{9\}\)$/\1.\2/' <<< "000000000$(( $( date +%s%N ) - start_time ))"
+    local delta
+    delta=$(( $( date +%s%N ) - start_time ))
+    printf '%d.%09d' "$(( delta / 10**9 ))" "$(( delta % 10**9 ))"
 }
 
 # Usage: __small_log_without_time <color> <format> <args...>
