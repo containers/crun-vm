@@ -35,10 +35,19 @@ fn generate(
         .perform_indent(true)
         .create_writer(File::create(path.as_ref())?);
 
-    s(&mut w, "domain", &[("type", "kvm")], |w| {
+    let has_kvm = Utf8Path::new("/dev/kvm").exists();
+    let domain_type = if has_kvm { "kvm" } else { "qemu" };
+
+    s(&mut w, "domain", &[("type", domain_type)], |w| {
         st(w, "name", &[], "domain")?;
 
-        se(w, "cpu", &[("mode", "host-passthrough")])?;
+        let cpu_mode = if has_kvm {
+            "host-passthrough"
+        } else {
+            "host-model"
+        };
+        se(w, "cpu", &[("mode", cpu_mode)])?;
+
         let vcpus = get_vcpu_count(spec).to_string();
         if let Some(cpu_set) = get_cpu_set(spec) {
             st(w, "vcpu", &[("cpuset", cpu_set.as_str())], vcpus.as_str())?;

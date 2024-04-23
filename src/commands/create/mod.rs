@@ -526,8 +526,10 @@ fn set_up_extra_container_mounts_and_devices(spec: &mut oci_spec::runtime::Spec)
             .unwrap(),
     );
 
-    add_bind_mount(spec, "/dev/kvm");
-    add_char_dev(spec, "/dev/kvm")?;
+    if Utf8Path::new("/dev/kvm").exists() {
+        add_bind_mount(spec, "/dev/kvm");
+        add_char_dev(spec, "/dev/kvm")?;
+    }
 
     // in case user sets up VFIO passthrough by overriding the libvirt XML
     for entry in fs::read_dir("/dev/vfio")? {
