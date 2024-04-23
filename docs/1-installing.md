@@ -1,96 +1,156 @@
 # 1. Installing crun-vm
 
-## On Fedora
+There are two steps to setting up crun-vm on a system:
 
-Run:
+  - Installing the actual `crun-vm` binary;
+  - Configuring Podman, Docker, and/or Kubernetes (whichever you intend to use
+    crun-vm with) to recognize crun-vm as a runtime.
+
+These steps are detailed in the sections below.
+
+<details open>
+  <summary><b>Navigation</b></summary>
+
+  1. **Installing crun-vm**
+     - [**Installing the `crun-vm` binary**](#installing-the-crun-vm-binary)
+       - [On Fedora](#on-fedora)
+       - [From source](#from-source)
+     - [**Making crun-vm available as a runtime**](#making-crun-vm-available-as-a-runtime)
+       - [To Podman](#to-podman)
+       - [To Docker](#to-docker)
+       - [To Kubernetes](#to-kubernetes)
+  2. [Running VMs with **Podman** or **Docker**](2-podman-docker.md)
+  3. [Running VMs as **systemd** services](3-systemd.md)
+  4. [Running VMs in **Kubernetes**](4-kubernetes.md)
+  5. [**crun-vm(1)** man page](5-crun-vm.1.ronn)
+
+</details>
+
+## Installing the `crun-vm` binary
+
+### On Fedora
 
 ```console
 $ dnf install crun-vm
 ```
 
-Podman will then be able to make use of the crun-vm runtime.
+### From source
 
-To also set up crun-vm for use with Docker:
+1. Install crun-vm's build dependencies:
 
-  - Merge the following configuration into `/etc/docker/daemon.json`:
+   - [cargo](https://doc.rust-lang.org/stable/cargo/getting-started/installation.html)
+   - [gzip](https://www.gzip.org/)
+   - [libselinux](https://github.com/SELinuxProject/selinux/tree/main/libselinux),
+     including development headers
+   - [ronn-ng](https://github.com/apjanke/ronn-ng)
 
-    ```json
-    {
-      "runtimes": {
-        "crun-vm": {
-          "path": "/usr/bin/crun-vm"
-        }
-      }
-    }
-    ```
+2. Install crun-vm's runtime dependencies:
 
-  - Reload the `docker` service for the new configuration to take effect:
+   - bash
+   - [coreutils](https://www.gnu.org/software/coreutils/)
+   - [crun](https://github.com/containers/crun)
+   - [crun-krun](https://github.com/containers/crun/blob/main/krun.1.md)
+   - [genisoimage](https://github.com/Distrotech/cdrkit)
+   - grep
+   - [libselinux](https://github.com/SELinuxProject/selinux/tree/main/libselinux)
+   - [libvirtd](https://gitlab.com/libvirt/libvirt) or
+     [virtqemud](https://gitlab.com/libvirt/libvirt)
+   - [passt](https://passt.top/)
+   - [qemu-img](https://gitlab.com/qemu-project/qemu)
+   - qemu-system-x86_64-core, qemu-system-aarch64-core, and/or other [QEMU
+     system emulators](https://gitlab.com/qemu-project/qemu) for the VM
+     architectures you want to support
+   - ssh
+   - [util-linux](https://github.com/util-linux/util-linux)
+   - [virsh](https://gitlab.com/libvirt/libvirt)
+   - [virtiofsd](https://gitlab.com/virtio-fs/virtiofsd)
+   - [virtlogd](https://gitlab.com/libvirt/libvirt)
 
-    ```console
-    $ service docker reload
-    ```
-
-## Build and install from source (on Fedora)
-
-1. Install crun-vm's runtime dependencies:
-
-   ```console
-   $ dnf install bash coreutils crun crun-krun genisoimage grep libselinux-devel libvirt-client libvirt-daemon-driver-qemu libvirt-daemon-log openssh-clients qemu-img qemu-system-x86-core sed shadow-utils util-linux virtiofsd
-   ```
-
-2. Install Rust and Cargo if you do not already have Rust tooling available:
-
-   ```console
-   $ dnf install cargo
-   ```
-
-3. Build crun-vm:
+3. Install crun-vm's binary and man page:
 
    ```console
-   $ cargo build
+   $ make install
    ```
 
-4. Copy the `target/debug/crun-vm` binary to wherever you prefer:
+## Making crun-vm available as a runtime
 
-   ```console
-   $ cp target/debug/crun-vm /usr/local/bin/
-   ```
+### To Podman
 
-5. If you're using Podman:
+Nothing to do here, since Podman automatically recognizes crun-vm as a runtime.
+Commands like `podman create` and `podman run` can be made to use the crun-vm
+runtime by passing them the `--runtime crun-vm` option.
 
-     - Merge the following configuration into
-       `/etc/containers/containers.conf`:
+<!--
+Paths search by Podman:
+  - `/usr/bin/crun-vm`
+  - `/usr/local/bin/crun-vm`
+  - `/usr/local/sbin/crun-vm`
+  - `/sbin/crun-vm`
+  - `/bin/crun-vm`
+  - `/run/current-system/sw/bin/crun-vm`
+ -->
 
-       > For rootless Podman, you can instead use
-       > `${XDG_CONFIG_PATH}/containers/containers.conf`, where
-       > `$XDG_CONFIG_PATH` defaults to `${HOME}/.config`.
+See [2. Using crun-vm and **Podman** or **Docker** to run a
+VM](2-podman-docker.md) to get started.
 
-       ```toml
-       [engine.runtimes]
-       crun-vm = ["/usr/local/bin/crun-vm"]
-       ```
+### To Docker
 
-   If you're using Docker:
+1. Merge the following configuration into `/etc/docker/daemon.json` (creating
+   that directory and file if necessary):
 
-     - Merge the following configuration into `/etc/docker/daemon.json`:
-
-       ```json
-       {
-         "runtimes": {
-           "crun-vm": {
-             "path": "/usr/local/bin/crun-vm"
-           }
-         }
+   ```json
+   {
+     "runtimes": {
+       "crun-vm": {
+         "path": "/usr/bin/crun-vm"
        }
-       ```
+     }
+   }
+   ```
 
-     - Reload the `docker` service for the new configuration to take effect:
+2. Reload the `docker` service for the new configuration to take effect:
 
-       ```console
-       $ service docker reload
-       ```
+   ```console
+   $ service docker reload
+   ```
 
-With Podman, it is possible to use crun-vm without installing it, *i.e.*,
-performing only steps 1–3 above. In this case, instead of setting the runtime
-with `--runtime crun-vm`, specify an absolute path to the runtime binary:
-`--runtime "$PWD"/target/debug/crun-vm`.
+Commands like `docker create` and `docker run` can then be made to use the
+crun-vm runtime by passing them the `--runtime crun-vm` option.
+
+See [2. Using crun-vm and **Podman** or **Docker** to run a
+VM](2-podman-docker.md) to get started.
+
+### To Kubernetes
+
+For crun-vm to be usable as a runtime in a Kubernetes cluster, the latter must
+be use the [CRI-O] runtime. See the Kubernetes docs on [runtimes] for more
+information.
+
+1. Install crun-vm on all cluster nodes where pods may be scheduled, using any
+   of the methods [described above](#installing-the-crun-vm-binary).
+
+2. Append the following to `/etc/crio/crio.conf`:
+
+   ```toml
+   [crio.runtime.runtimes.crun-vm]
+   runtime_path = "/usr/bin/crun-vm"
+   ```
+
+3. Create a `RuntimeClass` object in the cluster that references crun-vm:
+
+   ```yaml
+   apiVersion: node.k8s.io/v1
+   kind: RuntimeClass
+   metadata:
+     name: crun-vm  # a name of your choice
+   handler: crun-vm
+   ```
+
+Pods can then be configured to use this `RuntimeClass` by specifying its name
+under `Pod.spec.runtimeClassName`.
+
+See [4. Using crun-vm and **Pod YAML** to run a VM with **Podman**, **systemd**,
+or **Kubernetes**](4-pod-yaml.md) to get started.
+
+[runtimes]: https://kubernetes.io/docs/setup/production-environment/container-runtimes/#cri-o
+[CRI-O]: https://cri-o.io/
