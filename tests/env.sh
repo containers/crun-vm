@@ -118,6 +118,8 @@ repo_root=$( readlink -e "$( dirname "$0" )/.." )
 temp_dir=$( mktemp -d )
 trap '__extra_cleanup; rm -fr "$temp_dir"' EXIT
 
+export RUST_BACKTRACE=1 RUST_LIB_BACKTRACE=1
+
 case "${1:-}" in
 build)
     if (( $# != 1 )); then
@@ -383,7 +385,7 @@ run)
                 TEMP_DIR=~/$label.temp
                 UTIL_DIR=~/$label.util
                 ENGINE=$engine
-                export RUST_BACKTRACE=${RUST_BACKTRACE:-1}
+                export RUST_BACKTRACE=1 RUST_LIB_BACKTRACE=1
                 $( cat "$t" )\
                 "
 
