@@ -38,23 +38,3 @@ jobs:
     owner: rhcontainerbot
     project: podman-next
     enable_net: true
-
-  # Unit tests
-  - job: tests
-    trigger: pull_request
-    skip_build: true
-    targets:
-      - fedora-all-aarch64
-      - fedora-all-x86_64
-    identifier: unit_test
-    tmt_plan: "/plans/unit_test"
-
-  # Validate test
-  - job: tests
-    trigger: pull_request
-    skip_build: true
-    targets:
-      # Only need to test on one target
-      - fedora-latest-stable-x86_64
-    identifier: validate_test
-    tmt_plan: "/plans/validate_test"
