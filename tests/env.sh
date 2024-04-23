@@ -142,7 +142,11 @@ build)
     # expand base image
 
     __log_and_run qemu-img create -f qcow2 "$temp_dir/resized-image.qcow2" 20G
-    __log_and_run virt-resize --expand /dev/sda5 "$temp_dir/image" "$temp_dir/resized-image.qcow2"
+    __log_and_run virt-resize \
+        --quiet \
+        --expand /dev/sda5 \
+        "$temp_dir/image" \
+        "$temp_dir/resized-image.qcow2"
 
     rm "$temp_dir/image"
 
@@ -207,7 +211,10 @@ build)
     __log_and_run podman wait --ignore "$container_name-build"
     __extra_cleanup() { :; }
 
-    __log_and_run virt-sparsify "$temp_dir/resized-image.qcow2" "$temp_dir/final-image.qcow2"
+    __log_and_run virt-sparsify \
+        --quiet \
+        "$temp_dir/resized-image.qcow2" \
+        "$temp_dir/final-image.qcow2"
 
     rm "$temp_dir/resized-image.qcow2"
 
