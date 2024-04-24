@@ -122,6 +122,15 @@ trap '__extra_cleanup; rm -fr "$temp_dir"' EXIT
 
 export RUST_BACKTRACE=1 RUST_LIB_BACKTRACE=1
 
+arch=$( uname -m )
+case "$arch" in
+x86_64|aarch64)
+    ;;
+*)
+    >&2 echo "Unsupported arch \"$arch\""
+    ;;
+esac
+
 case "${1:-}" in
 build)
     if (( $# != 1 )); then
@@ -140,10 +149,19 @@ build)
 
     # expand base image
 
+    case "$arch" in
+    x86_64)
+        root_part=/dev/sda4
+        ;;
+    aarch64)
+        root_part=/dev/sda3
+        ;;
+    esac
+
     __log_and_run qemu-img create -f qcow2 "$temp_dir/resized-image.qcow2" 20G
     __log_and_run virt-resize \
         --quiet \
-        --expand /dev/sda4 \
+        --expand "$root_part" \
         "$temp_dir/image" \
         "$temp_dir/resized-image.qcow2"
 
@@ -174,6 +192,15 @@ build)
     # get a predictable keypair
     __exec 'ssh-keygen -q -f .ssh/id_rsa -N "" && sudo cp -r .ssh /root/'
 
+    case "$arch" in
+    x86_64)
+        qemu_pkg=qemu-system-x86-core
+        ;;
+    aarch64)
+        qemu_pkg=qemu-system-aarch64-core
+        ;;
+    esac
+
     __exec sudo dnf update -y
     __exec sudo dnf install -y \
         bash \
@@ -191,7 +218,7 @@ build)
         openssh-clients \
         podman \
         qemu-img \
-        qemu-system-x86-core \
+        "$qemu_pkg" \
         shadow-utils \
         util-linux \
         virtiofsd
