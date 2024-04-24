@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+use std::env;
 use std::fs::File;
 use std::io::{BufReader, Write};
 
@@ -61,7 +62,11 @@ fn generate(
         st(w, "memory", &[("unit", "b")], memory.as_str())?;
 
         s(w, "os", &[], |w| {
-            st(w, "type", &[("machine", "q35")], "hvm")
+            let attrs = match ["x86", "x86_64"].contains(&env::consts::ARCH) {
+                true => [("machine", "q35")].as_slice(),
+                false => [].as_slice(), // use libvirt's default
+            };
+            st(w, "type", attrs, "hvm")
         })?;
 
         // fw_cfg requires ACPI
