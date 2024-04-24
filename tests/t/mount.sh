@@ -9,7 +9,7 @@ for os in fedora coreos; do
     echo hello > "$TEMP_DIR/file"
 
     __engine run \
-        --rm --detach \
+        --detach \
         --name "mount-$os" \
         --volume "$TEMP_DIR/file:$home/file:z" \
         --volume "$TEMP_DIR:$home/dir:z" \
@@ -42,5 +42,6 @@ for os in fedora coreos; do
     __test
 
     __engine stop --time 0 "mount-$os"
+    __engine rm "mount-$os"
 
 done

@@ -24,11 +24,7 @@ cat >"$TEMP_DIR/config.ign" <<EOF
 }
 EOF
 
-__engine run \
-    --rm --detach \
-    --name ignition \
-    "$image" \
-    --ignition "$TEMP_DIR/config.ign"
+__engine run --detach --name ignition "$image" --ignition "$TEMP_DIR/config.ign"
 
 __test() {
     __engine exec ignition --as "$user" "cmp $home/file <<< hello"

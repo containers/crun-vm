@@ -15,11 +15,7 @@ EOF
 cat >"$TEMP_DIR/meta-data" <<EOF
 EOF
 
-__engine run \
-    --rm --detach \
-    --name cloud-init \
-    "$image" \
-    --cloud-init "$TEMP_DIR"
+__engine run --detach --name cloud-init "$image" --cloud-init "$TEMP_DIR"
 
 __test() {
     __engine exec cloud-init --as "$user" "cmp $home/file <<< hello"
