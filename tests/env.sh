@@ -125,6 +125,15 @@ trap '__extra_cleanup; rm -fr "$temp_dir"' EXIT
 
 export RUST_BACKTRACE=1 RUST_LIB_BACKTRACE=1
 
+arch=$( uname -m )
+case "$arch" in
+x86_64|aarch64)
+    ;;
+*)
+    >&2 echo "Unsupported arch \"$arch\""
+    ;;
+esac
+
 case "${1:-}" in
 build)
     if (( $# != 1 )); then
@@ -143,21 +152,37 @@ build)
 
     # expand base image
 
-    __log_and_run qemu-img create -f qcow2 "$temp_dir/image.qcow2" 50G
+    root_part=$(
+        virt-filesystems --add "$temp_dir/image" --long |
+            awk '/^\/dev\// {if ($4 == "fedora") print $1}'
+        )
+
+    __log_and_run qemu-img create -f qcow2 "$temp_dir/image.qcow2" 20G
     __log_and_run virt-resize \
         --quiet \
-        --expand /dev/sda4 \
+        --expand "$root_part" \
         "$temp_dir/image" \
         "$temp_dir/image.qcow2"
 
     rm "$temp_dir/image"
+
+    # enable nested virtualization
+
+    if [[ "$arch" == aarch64 ]]; then
+        __log_and_run virt-customize \
+            --quiet \
+            --no-network \
+            --add "$temp_dir/image.qcow2" \
+            --append-line '/etc/default/grub:GRUB_CMDLINE_LINUX_DEFAULT="kvm-arm.mode=nested"' \
+            --run-command 'grub2-mkconfig -o /boot/grub2/grub.cfg'
+    fi
 
     # launch VM from base image file
 
     __log_and_run podman run \
         --name "$container_name-build" \
         --runtime "$runtime" \
-        --memory 8g \
+        --memory 4g \
         --rm -dit \
         --rootfs "$temp_dir" \
         --persistent
@@ -177,6 +202,15 @@ build)
     # get a predictable keypair
     __exec 'ssh-keygen -q -f .ssh/id_rsa -N "" && sudo cp -r .ssh /root/'
 
+    case "$arch" in
+    x86_64)
+        qemu_system_pkg=qemu-system-x86-core
+        ;;
+    aarch64)
+        qemu_system_pkg=qemu-system-aarch64-core
+        ;;
+    esac
+
     __exec sudo dnf update -y
     __exec sudo dnf install -y \
         bash \
@@ -195,7 +229,7 @@ build)
         openssh-clients \
         podman \
         qemu-img \
-        qemu-system-x86-core \
+        "$qemu_system_pkg" \
         shadow-utils \
         util-linux \
         virtiofsd
@@ -254,11 +288,15 @@ start)
         __log_and_run podman stop --time 0 "$container_name"
     }
 
-    # load test images onto VM
+    # ensure nested hardware-accelerated virt is supported
 
     __exec() {
         __log_and_run podman exec "$container_name" --as fedora "$@"
     }
+
+    __exec '[[ -e /dev/kvm ]] || { sudo dmesg; exit 1; }'
+
+    # load test images onto VM
 
     chmod a+rx "$temp_dir"  # so user "fedora" in guest can access it
 
