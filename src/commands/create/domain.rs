@@ -19,7 +19,7 @@ pub fn set_up_libvirt_domain_xml(
 ) -> Result<()> {
     let path = spec.root_path()?.join("crun-vm/domain.xml");
 
-    generate(&path, spec, vm_image_info, mounts)?;
+    generate(&path, spec, vm_image_info, mounts, custom_options)?;
     merge_overlays(&path, &custom_options.merge_libvirt_xml)?;
 
     Ok(())
@@ -30,21 +30,23 @@ fn generate(
     spec: &oci_spec::runtime::Spec,
     vm_image_info: &VmImageInfo,
     mounts: &Mounts,
+    custom_options: &CustomOptions,
 ) -> Result<()> {
     let mut w = xml::EmitterConfig::new()
         .perform_indent(true)
         .create_writer(File::create(path.as_ref())?);
 
-    let has_kvm = Utf8Path::new("/dev/kvm").exists();
-    let domain_type = if has_kvm { "kvm" } else { "qemu" };
+    let domain_type = match custom_options.emulated {
+        true => "qemu",
+        false => "kvm",
+    };
 
     s(&mut w, "domain", &[("type", domain_type)], |w| {
         st(w, "name", &[], "domain")?;
 
-        let cpu_mode = if has_kvm {
-            "host-passthrough"
-        } else {
-            "host-model"
+        let cpu_mode = match custom_options.emulated {
+            true => "maximum",
+            false => "host-passthrough",
         };
         se(w, "cpu", &[("mode", cpu_mode)])?;
 

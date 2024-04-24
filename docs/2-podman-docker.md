@@ -314,6 +314,12 @@ $ podman run \
 
 ## Advanced options
 
+### System emulation
+
+To use system emulation instead of hardware-assisted virtualization, specify the
+`--emulated` flag. Without this flag, attempting to create a VM on a host tbat
+doesn't support KVM will fail.
+
 ### Inspecting and customizing the libvirt domain XML
 
 crun-vm internally uses [libvirt] to launch a VM, generating a [domain XML

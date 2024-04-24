@@ -52,6 +52,9 @@ pub struct CustomOptions {
     #[clap(long)]
     pub random_ssh_key_pair: bool,
 
+    #[clap(long, help = "Use system emulation rather than KVM")]
+    pub emulated: bool,
+
     #[clap(long)]
     pub cloud_init: Option<Utf8PathBuf>,
 

@@ -81,7 +81,7 @@ pub fn create(args: &liboci_cli::Create, raw_args: &[impl AsRef<OsStr>]) -> Resu
     set_up_devices(&mut spec, &mut mounts)?;
     set_up_blockdevs(&mut spec, &mut mounts, &custom_options)?;
 
-    set_up_extra_container_mounts_and_devices(&mut spec)?;
+    set_up_extra_container_mounts_and_devices(&mut spec, &custom_options)?;
     set_up_security(&mut spec);
 
     let ssh_pub_key = set_up_ssh_key_pair(
@@ -209,7 +209,7 @@ fn set_up_vm_image(
     let image_dir_path = priv_dir_path.join("image");
     fs::create_dir_all(&image_dir_path)?;
 
-    if !image_dir_path.join("image").exists() {
+    if !image_dir_path.join("image").try_exists()? {
         fs::hard_link(vm_image_path_in_host, image_dir_path.join("image"))?;
     }
 
@@ -485,7 +485,10 @@ fn set_up_blockdevs(
     Ok(())
 }
 
-fn set_up_extra_container_mounts_and_devices(spec: &mut oci_spec::runtime::Spec) -> Result<()> {
+fn set_up_extra_container_mounts_and_devices(
+    spec: &mut oci_spec::runtime::Spec,
+    custom_options: &CustomOptions,
+) -> Result<()> {
     fn add_bind_mount(spec: &mut oci_spec::runtime::Spec, path: impl AsRef<Path>) {
         spec.mounts_push(
             oci_spec::runtime::MountBuilder::default()
@@ -536,7 +539,12 @@ fn set_up_extra_container_mounts_and_devices(spec: &mut oci_spec::runtime::Spec)
             .unwrap(),
     );
 
-    if Utf8Path::new("/dev/kvm").exists() {
+    if !custom_options.emulated {
+        ensure!(
+            Path::new("/dev/kvm").try_exists()?,
+            "/dev/kvm not found; is host KVM support enabled?"
+        );
+
         add_bind_mount(spec, "/dev/kvm");
         add_char_dev(spec, "/dev/kvm")?;
     }
