@@ -84,10 +84,15 @@ pub fn create(args: &liboci_cli::Create, raw_args: &[impl AsRef<OsStr>]) -> Resu
     set_up_extra_container_mounts_and_devices(&mut spec)?;
     set_up_security(&mut spec);
 
-    if is_first_create {
-        let ssh_pub_key =
-            set_up_ssh_key_pair(&mut spec, &custom_options, runtime_env, &priv_dir_path)?;
+    let ssh_pub_key = set_up_ssh_key_pair(
+        &mut spec,
+        &custom_options,
+        runtime_env,
+        &priv_dir_path,
+        is_first_create,
+    )?;
 
+    if is_first_create {
         set_up_first_boot_config(&spec, &mounts, &custom_options, &ssh_pub_key)?;
         set_up_libvirt_domain_xml(&spec, &base_vm_image_info, &mounts, &custom_options)?;
     }
@@ -607,6 +612,7 @@ fn set_up_ssh_key_pair(
     custom_options: &CustomOptions,
     env: RuntimeEnv,
     priv_dir_path: &Utf8Path,
+    is_first_create: bool,
 ) -> Result<String> {
     let user_home: Utf8PathBuf = home::home_dir()
         .ok_or_else(|| anyhow!("could not determine user home"))?
@@ -636,7 +642,7 @@ fn set_up_ssh_key_pair(
             spec.mount_label(),
             true,
         )?;
-    } else {
+    } else if is_first_create {
         // use new key pair
 
         fs::create_dir_all(&container_ssh_dir)?;
