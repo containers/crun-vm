@@ -61,12 +61,18 @@ fn generate(
         let memory = get_memory_size(spec).to_string();
         st(w, "memory", &[("unit", "b")], memory.as_str())?;
 
-        s(w, "os", &[], |w| {
+        s(w, "os", &[("firmware", "efi")], |w| {
             let attrs = match ["x86", "x86_64"].contains(&env::consts::ARCH) {
                 true => [("machine", "q35")].as_slice(),
                 false => [].as_slice(), // use libvirt's default
             };
-            st(w, "type", attrs, "hvm")
+            st(w, "type", attrs, "hvm")?;
+
+            s(w, "firmware", &[], |w| {
+                se(w, "feature", &[("enabled", "no"), ("name", "secure-boot")])
+            })?;
+
+            Ok(())
         })?;
 
         // fw_cfg requires ACPI
