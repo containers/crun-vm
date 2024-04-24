@@ -31,7 +31,7 @@ default-features = false
 version = "0.15.2"
 
 [dependencies.nix]
-version = "0.27.0"
+version = "0.28.0"
 default-features = false
 features = ["fs", "mount"]
 
@@ -50,7 +50,7 @@ default-features = false
 features = ["std"]
 
 [dependencies.rust-embed]
-version = "6.0"
+version = "8.0"
 default-features = false
 features = ["debug-embed"]
 
@@ -69,12 +69,3 @@ version = "2.0"
 [dependencies.xml-rs]
 version = "0.8.0"
 default-features = false
-
-[dev-dependencies.test-case]
-version = "3.0"
-default-features = false
-
-[dev-dependencies.uuid]
-version = "1.0"
-default-features = false
-features = ["std", "v4"]
