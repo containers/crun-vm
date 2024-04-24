@@ -9,10 +9,12 @@ jobs:
     skip_build: true
     enable_net: true
     targets:
-      # TODO: Replace these three with fedora-all-x86_64 once Fedora 38 is gone.
-      - fedora-rawhide-x86_64
-      - fedora-40-x86_64
-      - fedora-39-x86_64
+      - fedora-stable-x86_64
+      # TODO: Looks like we need Armv8.3-A CPUs for nested virt, and QEMU and
+      # kernel support is also very recent. Testing Farm is using AWS Graviton3,
+      # which is ARMv8.4-A, so hopefully things work once the software stack
+      # catches up and we can enable this.
+      - fedora-stable-aarch64
     identifier: docker
     tmt_plan: /tests/docker
 

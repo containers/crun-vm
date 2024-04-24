@@ -124,6 +124,15 @@ trap '__extra_cleanup; rm -fr "$temp_dir"' EXIT
 
 export RUST_BACKTRACE=1 RUST_LIB_BACKTRACE=1
 
+arch=$( uname -m )
+case "$arch" in
+x86_64|aarch64)
+    ;;
+*)
+    >&2 echo "Unsupported arch \"$arch\""
+    ;;
+esac
+
 case "${1:-}" in
 build)
     if (( $# != 1 )); then
@@ -135,6 +144,15 @@ build)
     __big_log 33 'Building test env image...'
 
     # build disk image
+
+    case "$arch" in
+    x86_64)
+        qemu_system_pkg=qemu-system-x86-core
+        ;;
+    aarch64)
+        qemu_system_pkg=qemu-system-aarch64-core
+        ;;
+    esac
 
     packages=(
         bash
@@ -154,7 +172,7 @@ build)
         openssh-clients
         podman
         qemu-img
-        qemu-system-x86-core
+        "$qemu_system_pkg"
         shadow-utils
         util-linux
         virtiofsd
@@ -165,13 +183,21 @@ build)
 
     daemon_json='{ "runtimes": { "crun-vm": { "path": "/home/fedora/bin/crun-vm" } } }'
 
-    commands=(
+    virt_builder_args=(
         # generate an ssh keypair for users fedora and root so crun-vm
         # containers get a predictable keypair
-        'ssh-keygen -q -f /root/.ssh/id_rsa -N ""'
+        --run-command='ssh-keygen -q -f /root/.ssh/id_rsa -N ""'
 
-        "mkdir -p /etc/docker && echo ${daemon_json@Q} > /etc/docker/daemon.json"
+        --run-command="mkdir -p /etc/docker && echo ${daemon_json@Q} > /etc/docker/daemon.json"
     )
+
+    if [[ "$arch" == aarch64 ]]; then
+        # enable nested virtualization
+        virt_builder_args+=(
+            --append-line '/etc/default/grub:GRUB_CMDLINE_LINUX_DEFAULT="kvm-arm.mode=nested"'
+            --run-command 'grub2-mkconfig -o /boot/grub2/grub.cfg'
+        )
+    fi
 
     __log_and_run virt-builder \
         "fedora-${CRUN_VM_TEST_ENV_FEDORA_VERSION:-40}" \
@@ -182,7 +208,7 @@ build)
         --size 50G \
         --root-password password:root \
         --install "$packages_joined" \
-        "${commands[@]/#/--run-command=}"
+        "${virt_builder_args[@]}"
 
     # reduce image file size
 
@@ -231,6 +257,10 @@ start)
     __exec() {
         __log_and_run podman exec "$container_name" --as fedora "$@"
     }
+
+    # ensure nested hardware-accelerated virt is supported
+
+    __exec '[[ -e /dev/kvm ]] || { sudo dmesg; exit 1; }'
 
     chmod a+rx "$temp_dir"  # so user "fedora" in guest can access it
 
