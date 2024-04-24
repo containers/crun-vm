@@ -132,6 +132,11 @@ fn set_up_container_root(
     let new_root_path = priv_dir_path.join("root");
     fs::create_dir_all(&new_root_path)?;
 
+    match fs::remove_file(new_root_path.join("crun-vm/ssh-successful")) {
+        Err(e) if e.kind() == ErrorKind::NotFound => {}
+        r => r?,
+    };
+
     // create root directory
 
     spec.set_root(Some(

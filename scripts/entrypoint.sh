@@ -50,9 +50,6 @@ virsh --connect "qemu+unix:///session?socket=$socket" "\$@"
 EOF
 chmod +x /crun-vm/virsh
 
-# remove if present from previous boot
-rm -f /crun-vm/ssh-successful
-
 # launch VM
 
 function __bg_ensure_tty() {
