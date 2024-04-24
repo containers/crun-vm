@@ -63,7 +63,6 @@ COMMANDS
 
 # Usage: __elapsed
 __elapsed() {
-    # shellcheck disable=SC2001
     local delta
     delta=$(( $( date +%s%N ) - start_time ))
     printf '%d.%09d' "$(( delta / 10**9 ))" "$(( delta % 10**9 ))"
