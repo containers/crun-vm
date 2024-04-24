@@ -5,14 +5,14 @@ set -o errexit -o pipefail -o nounset
 
 start_time="$( date +%s%N )"
 
-env_image_base=quay.io/containerdisks/fedora:39
+env_image_base=quay.io/containerdisks/fedora:40
 env_image=quay.io/crun-vm/test-env:latest
 container_name=crun-vm-test-env
 
 declare -A TEST_IMAGES
 TEST_IMAGES=(
-    [fedora]=quay.io/containerdisks/fedora:39          # uses cloud-init
-    [coreos]=quay.io/crun-vm/example-fedora-coreos:39  # uses Ignition
+    [fedora]=quay.io/containerdisks/fedora:40          # uses cloud-init
+    [coreos]=quay.io/crun-vm/example-fedora-coreos:40  # uses Ignition
 )
 
 declare -A TEST_IMAGES_DEFAULT_USER
@@ -143,7 +143,7 @@ build)
     __log_and_run qemu-img create -f qcow2 "$temp_dir/resized-image.qcow2" 20G
     __log_and_run virt-resize \
         --quiet \
-        --expand /dev/sda5 \
+        --expand /dev/sda4 \
         "$temp_dir/image" \
         "$temp_dir/resized-image.qcow2"
 

@@ -14,8 +14,7 @@ for os in fedora coreos; do
         --volume "$TEMP_DIR/file:$home/file:z" \
         --volume "$TEMP_DIR:$home/dir:z" \
         --mount "type=tmpfs,dst=$home/tmp" \
-        "$image" \
-        ""
+        "$image"
 
     __test() {
         __engine exec "mount-$os" --as "$user"

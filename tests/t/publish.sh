@@ -7,8 +7,7 @@ __engine run \
     --rm --detach \
     --name publish \
     --publish 127.0.0.1::8000 \
-    "$image" \
-    ""
+    "$image"
 
 endpoint=$( __engine port publish | tee /dev/stderr | cut -d' ' -f3 )
 

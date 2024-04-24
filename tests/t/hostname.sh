@@ -7,13 +7,7 @@ for os in fedora coreos; do
 
     # default hostname
 
-    id=$(
-        __engine run \
-            --rm --detach \
-            --name "hostname-$os-default" \
-            "$image" \
-            ""
-        )
+    id=$( __engine run --rm --detach --name "hostname-$os-default" "$image" )
 
     __test() {
         __engine exec "hostname-$os-default" --as "$user" \
@@ -32,8 +26,7 @@ for os in fedora coreos; do
         --rm --detach \
         --name "hostname-$os-custom" \
         --hostname my-test-vm \
-        "$image" \
-        ""
+        "$image"
 
     __test() {
         __engine exec "hostname-$os-custom" --as "$user" \

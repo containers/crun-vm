@@ -16,7 +16,7 @@ launch and manage your VMs through systemd. Here's an example of how to do so:
 
    [Container]
    PodmanArgs=--runtime crun-vm            # make Podman use crun-vm as the runtime
-   Image=quay.io/containerdisks/fedora:39  # the container image containing our VM image
+   Image=quay.io/containerdisks/fedora:40  # the container image containing our VM image
    Exec=--password pass                    # optional crun-vm arguments
 
    [Install]
@@ -27,7 +27,7 @@ launch and manage your VMs through systemd. Here's an example of how to do so:
    into the following podman invocation:
 
    ```console
-   $ podman run --runtime crun-vm quay.io/containerdisks/fedora:39 --password pass
+   $ podman run --runtime crun-vm quay.io/containerdisks/fedora:40 --password pass
    ```
 
 2. Inform systemd of the new unit file:

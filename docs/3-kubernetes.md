@@ -49,8 +49,6 @@ spec:
   containers:
     - name: my-vm
       image: quay.io/crun-vm/example-http-server:latest
-      args:
-        - ""  # unused, but must specify command because container image does not
       ports:
         - containerPort: 80
   runtimeClassName: crun-vm
@@ -133,7 +131,7 @@ metadata:
 spec:
   containers:
     - name: my-other-vm
-      image: quay.io/containerdisks/fedora:39
+      image: quay.io/containerdisks/fedora:40
       args:
         - --cloud-init=/etc/cloud-init
       volumeMounts:

@@ -12,7 +12,7 @@ First, obtain a QEMU-compatible VM image and place it in a directory by itself:
 
 ```console
 $ mkdir my-vm-image
-$ curl -LO --output-dir my-vm-image https://download.fedoraproject.org/pub/fedora/linux/releases/39/Cloud/x86_64/images/Fedora-Cloud-Base-39-1.5.x86_64.qcow2
+$ curl -LO --output-dir my-vm-image https://download.fedoraproject.org/pub/fedora/linux/releases/40/Cloud/x86_64/images/Fedora-Cloud-Base-Generic.x86_64-40-1.14.qcow2
 ```
 
 Then run:
@@ -86,8 +86,7 @@ convention, so you can use those here:
 $ podman run \
     --runtime crun-vm \
     -it --rm \
-    quay.io/containerdisks/fedora:39 \
-    ""  # unused, but must specify command because container image does not
+    quay.io/containerdisks/fedora:40
 ```
 
 You can also use `util/package-vm-image.sh` to easily package a VM image into a
@@ -113,7 +112,7 @@ meta-data  user-data  vendor-data
 $ podman run \
     --runtime crun-vm \
     -it --rm \
-    quay.io/containerdisks/fedora:39 \
+    quay.io/containerdisks/fedora:40 \
     --cloud-init ~/examples/cloud-init/config  # path must be absolute
 ```
 
@@ -127,7 +126,7 @@ option:
 $ podman run \
     --runtime crun-vm \
     -it --rm \
-    quay.io/containerdisks/fedora:39 \
+    quay.io/containerdisks/fedora:40 \
     --password pass
 ```
 
@@ -140,7 +139,7 @@ the `--ignition` option:
 $ podman run \
     --runtime crun-vm \
     -it --rm \
-    quay.io/crun-vm/example-fedora-coreos:39 \
+    quay.io/crun-vm/example-fedora-coreos:40 \
     --ignition ~/examples/ignition/config.ign  # path must be absolute
 ```
 
@@ -162,8 +161,7 @@ port 22, you can `ssh` into it as root using podman-exec:
 $ podman run \
     --runtime crun-vm \
     --detach --rm \
-    quay.io/containerdisks/fedora:39 \
-    ""
+    quay.io/containerdisks/fedora:40
 8068a2c180e0f4bf494f5e0baa37d9f13a9810f76b361c0771b73666e47ec383
 
 $ podman exec --latest whoami
@@ -214,8 +212,7 @@ $ podman run \
     --runtime crun-vm \
     --detach --rm \
     -p 8000:80 \
-    quay.io/crun-vm/example-http-server:latest \
-    ""
+    quay.io/crun-vm/example-http-server:latest
 36c8705482589cfc4336a03d3802e7699f5fb228123d18e693488ac7b80116d1
 
 $ curl localhost:8000
@@ -251,7 +248,7 @@ $ podman run \
     --runtime crun-vm \
     -it --rm \
     -v ./util:/home/fedora/util:z \
-    quay.io/containerdisks/fedora:39 \
+    quay.io/containerdisks/fedora:40 \
     --password pass
 ```
 
@@ -277,7 +274,7 @@ $ podman run \
     --runtime crun-vm \
     -it --rm \
     -v ./README.md:/home/fedora/README.md:z \
-    quay.io/containerdisks/fedora:39 \
+    quay.io/containerdisks/fedora:40 \
     --password pass
 ```
 
@@ -296,7 +293,7 @@ $ podman run \
     --runtime crun-vm \
     -it --rm \
     --device /dev/ram0:/home/fedora/my-disk \
-    quay.io/containerdisks/fedora:39 \
+    quay.io/containerdisks/fedora:40 \
     --password pass
 ```
 
@@ -310,7 +307,7 @@ raw format is assumed):
 $ podman run \
     --runtime crun-vm \
     -it --rm \
-    quay.io/containerdisks/fedora:39 \
+    quay.io/containerdisks/fedora:40 \
     --password pass \
     --blockdev source=~/my-disk.qcow2,target=/home/fedora/my-disk,format=qcow2  # paths must be absolute
 ```
