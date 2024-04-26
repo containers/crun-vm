@@ -20,8 +20,6 @@ exec > "$bootc_dir/progress" 2>&1
 
 # get info about the container *image*
 
-__step 'Storing the container image as an OCI archive...'
-
 image_info=$(
     podman container inspect \
         --format '{{.ImageName}}\t{{.Image}}' \
@@ -31,34 +29,86 @@ image_info=$(
 image_name=$( cut -f1 <<< "$image_info" )
 image_id=$( cut -f2 <<< "$image_info" )
 
-oci_archive=$bootc_dir/image.oci-archive
+# check if VM image is cached
 
-# save container *image* as an OCI archive
+container_name=crun-vm-$container_id
 
-podman save --format oci-archive --output "$oci_archive.tmp" "$image_id" </dev/null
-mv "$oci_archive.tmp" "$oci_archive"
+cache_image_label=crun-vm.from=$image_id
+cache_image_id=$( podman images --filter "label=$cache_image_label" --format '{{.ID}}' --no-trunc )
 
-# adjust krun config
+if [[ -n "$cache_image_id" ]]; then
 
-__step 'Generating a VM image from the container image...'
+    # retrieve VM image from cached containerdisk
 
-__sed() {
-    sed -i "s|$1|$2|" "$bootc_dir/config.json"
-}
+    __step "Retrieving cached VM image..."
 
-__sed "<IMAGE_NAME>"    "$image_name"
-__sed "<ORIGINAL_ROOT>" "$original_root"
-__sed "<PRIV_DIR>"      "$priv_dir"
+    trap 'podman rm --force "$container_name" >/dev/null 2>&1 || true' EXIT
 
-# run bootc-install under krun
+    podman create --quiet --name "$container_name" "$cache_image_id" </dev/null >/dev/null
+    podman export "$container_name" | tar -C "$bootc_dir" -x image.qcow2
+    podman rm "$container_name" >/dev/null 2>&1
 
-truncate --size 10G "$bootc_dir/image.raw"  # TODO: allow adjusting disk size
+    trap '' EXIT
 
-krun run \
-    --config "$bootc_dir/config.json" \
-    "crun-vm-$container_id" \
-    </dev/ptmx
+else
 
-[[ -e "$bootc_dir/success" ]]
+    __step "Converting $image_name into a VM image..."
 
-__step 'Booting VM...'
+    # save container *image* as an OCI archive
+
+    echo -n 'Preparing container image...'
+
+    podman save \
+        --format oci-archive \
+        --output "$bootc_dir/image.oci-archive" \
+        "$image_id" \
+        </dev/null 2>&1 \
+        | sed -u 's/.*/./' \
+        | stdbuf -o0 tr -d '\n'
+
+    echo
+
+    # adjust krun config
+
+    __sed() {
+        sed -i "s|$1|$2|" "$bootc_dir/config.json"
+    }
+
+    __sed "<IMAGE_NAME>"    "$image_name"
+    __sed "<ORIGINAL_ROOT>" "$original_root"
+    __sed "<PRIV_DIR>"      "$priv_dir"
+
+    # run bootc-install under krun
+
+    truncate --size 10G "$bootc_dir/image.raw"  # TODO: allow adjusting disk size
+
+    trap 'krun delete --force "$container_name" >/dev/null 2>&1 || true' EXIT
+    krun run --config "$bootc_dir/config.json" "$container_name" </dev/ptmx
+    trap '' EXIT
+
+    [[ -e "$bootc_dir/bootc-install-success" ]]
+
+    # convert image to qcow2 to get a lower file size
+
+    qemu-img convert -f raw -O qcow2 "$bootc_dir/image.raw" "$bootc_dir/image.qcow2"
+    rm "$bootc_dir/image.raw"
+
+    # cache VM image file as containerdisk
+
+    __step "Caching VM image as a containerdisk..."
+
+    id=$(
+        podman build --quiet --file - --label "$cache_image_label" "$bootc_dir" <<-'EOF'
+        FROM scratch
+        COPY image.qcow2 /
+        ENTRYPOINT ["no-entrypoint"]
+EOF
+    )
+
+    echo "Stored as untagged container image with ID $id"
+
+fi
+
+__step "Booting VM..."
+
+touch "$bootc_dir/success"
