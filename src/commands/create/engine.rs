@@ -16,6 +16,14 @@ pub enum Engine {
 }
 
 impl Engine {
+    pub fn command(self) -> Option<&'static str> {
+        match self {
+            Engine::Podman => Some("podman"),
+            Engine::Docker => Some("docker"),
+            Engine::Kubernetes => None,
+        }
+    }
+
     pub fn detect(
         container_id: &str,
         bundle_path: &Utf8Path,

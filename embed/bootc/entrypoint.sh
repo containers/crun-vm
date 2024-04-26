@@ -36,7 +36,7 @@ fi
 # build disk image using bootc-install
 
 PATH=/output/bin:$PATH bootc install to-disk \
-    --source-imgref oci-archive:/output/image.oci-archive \
+    --source-imgref docker-archive:/output/image.docker-archive \
     --target-imgref "$image_name" \
     --skip-fetch-check \
     --generic-image \

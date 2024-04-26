@@ -3,9 +3,10 @@
 
 set -o errexit -o pipefail -o nounset
 
-original_root=$1
-priv_dir=$2
-container_id=$3
+engine=$1
+container_id=$2
+original_root=$3
+priv_dir=$4
 
 __step() {
     printf "\033[36m%s\033[0m\n" "$*"
@@ -21,12 +22,14 @@ exec > "$bootc_dir/progress" 2>&1
 # get info about the container *image*
 
 image_info=$(
-    podman container inspect \
-        --format '{{.ImageName}}\t{{.Image}}' \
+    "$engine" container inspect \
+        --format '{{.Config.Image}}'$'\t''{{.Image}}' \
         "$container_id"
     )
 
 image_name=$( cut -f1 <<< "$image_info" )
+# image_name=${image_name#sha256:}
+
 image_id=$( cut -f2 <<< "$image_info" )
 
 # check if VM image is cached
@@ -34,7 +37,7 @@ image_id=$( cut -f2 <<< "$image_info" )
 container_name=crun-vm-$container_id
 
 cache_image_label=containers.crun-vm.from=$image_id
-cache_image_id=$( podman images --filter "label=$cache_image_label" --format '{{.Id}}' )
+cache_image_id=$( "$engine" images --filter "label=$cache_image_label" --format '{{.Id}}' )
 
 if [[ -n "$cache_image_id" ]]; then
 
@@ -42,11 +45,11 @@ if [[ -n "$cache_image_id" ]]; then
 
     __step "Retrieving cached VM image..."
 
-    trap 'podman rm --force "$container_name" >/dev/null 2>&1 || true' EXIT
+    trap '"$engine" rm --force "$container_name" >/dev/null 2>&1 || true' EXIT
 
-    podman create --quiet --name "$container_name" "$cache_image_id" >/dev/null
-    podman export "$container_name" | tar -C "$bootc_dir" -x image.qcow2
-    podman rm "$container_name" >/dev/null 2>&1
+    "$engine" create --quiet --name "$container_name" "$cache_image_id" >/dev/null
+    "$engine" export "$container_name" | tar -C "$bootc_dir" -x image.qcow2
+    "$engine" rm "$container_name" >/dev/null 2>&1
 
     trap '' EXIT
 
@@ -54,15 +57,11 @@ else
 
     __step "Converting $image_name into a VM image..."
 
-    # save container *image* as an OCI archive
+    # save container *image* as an archive
 
     echo -n 'Preparing container image...'
 
-    podman save \
-        --format oci-archive \
-        --output "$bootc_dir/image.oci-archive" \
-        "$image_id" \
-        2>&1 \
+    "$engine" save --output "$bootc_dir/image.docker-archive" "$image_id" 2>&1 \
         | sed -u 's/.*/./' \
         | stdbuf -o0 tr -d '\n'
 
@@ -98,7 +97,7 @@ else
     __step "Caching VM image as a containerdisk..."
 
     id=$(
-        podman build --quiet --file - --label "$cache_image_label" "$bootc_dir" <<-'EOF'
+        "$engine" build --quiet --file - --label "$cache_image_label" "$bootc_dir" <<-'EOF'
         FROM scratch
         COPY image.qcow2 /
         ENTRYPOINT ["no-entrypoint"]
