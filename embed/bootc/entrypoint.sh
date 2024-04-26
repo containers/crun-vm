@@ -48,4 +48,4 @@ PATH=/output/bin:$PATH bootc install to-disk \
 
 # communicate success by creating a file, since krun always exits successfully
 
-touch /output/success
+touch /output/bootc-install-success

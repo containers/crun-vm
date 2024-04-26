@@ -67,7 +67,7 @@ if (( is_bootc_container == 1 )) && [[ ! -e /crun-vm/image/image ]]; then
     [[ -e /crun-vm/bootc/success ]]
 
     mkdir -p /crun-vm/image
-    mv /crun-vm/bootc/image.raw /crun-vm/image/image
+    mv /crun-vm/bootc/image.qcow2 /crun-vm/image/image
 
 fi
 

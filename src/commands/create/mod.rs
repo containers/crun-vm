@@ -289,7 +289,7 @@ fn set_up_vm_image(
         return Ok(VmImageInfo {
             path: mirror_vm_image_path_in_container,
             size: 0,
-            format: "raw".to_string(),
+            format: "qcow2".to_string(),
         });
     }
 
