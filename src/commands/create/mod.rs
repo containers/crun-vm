@@ -290,6 +290,7 @@ fn set_up_vm_image(
         // the image will be generated later
         return Ok(VmImageInfo {
             path: mirror_vm_image_path_in_container,
+            arch: None,
             size: 0,
             format: "qcow2".to_string(),
         });
@@ -315,7 +316,7 @@ fn set_up_vm_image(
     fs::create_dir_all(&image_dir_path)?;
 
     if !image_dir_path.join("image").try_exists()? {
-        fs::hard_link(vm_image_path_in_host, image_dir_path.join("image"))?;
+        fs::hard_link(&vm_image_path_in_host, image_dir_path.join("image"))?;
     }
 
     if custom_options.persistent {
@@ -338,7 +339,8 @@ fn set_up_vm_image(
 
         bind_mount_file(&mirror_vm_image_path_in_host, &mirror_vm_image_path_in_host)?;
 
-        let mut vm_image_info = VmImageInfo::of(&mirror_vm_image_path_in_host)?;
+        let mut vm_image_info =
+            VmImageInfo::of(&mirror_vm_image_path_in_host, custom_options.emulated)?;
         vm_image_info.path = mirror_vm_image_path_in_container;
 
         Ok(vm_image_info)
@@ -366,7 +368,8 @@ fn set_up_vm_image(
         let overlay_vm_image_path_in_container =
             Utf8Path::new("/").join(overlay_vm_image_path_in_container);
 
-        let mut base_vm_image_info = VmImageInfo::of(&mirror_vm_image_path_in_host)?;
+        let mut base_vm_image_info =
+            VmImageInfo::of(&vm_image_path_in_host, custom_options.emulated)?;
         base_vm_image_info.path = mirror_vm_image_path_in_container;
 
         if is_first_create {
@@ -375,6 +378,7 @@ fn set_up_vm_image(
 
         Ok(VmImageInfo {
             path: Utf8Path::new("/").join(overlay_vm_image_path_in_container),
+            arch: base_vm_image_info.arch,
             size: base_vm_image_info.size,
             format: "qcow2".to_string(),
         })

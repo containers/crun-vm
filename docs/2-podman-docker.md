@@ -336,8 +336,9 @@ $ podman run \
 ### System emulation
 
 To use system emulation instead of hardware-assisted virtualization, specify the
-`--emulated` flag. Without this flag, attempting to create a VM on a host tbat
-doesn't support KVM will fail.
+`--emulated` flag. Without this flag, attempting to create a VM from a guest
+with a different architecture from the host's or on a host that doesn't support
+KVM will fail.
 
 It's not currently possible to use this flag when the container image is a bootc
 bootable container.
