@@ -2,8 +2,8 @@
 
 mod custom_opts;
 mod domain;
+mod engine;
 mod first_boot;
-mod runtime_env;
 
 use std::ffi::OsStr;
 use std::fs::{self, File, Permissions};
@@ -14,15 +14,13 @@ use std::process::{Command, Stdio};
 
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
-use lazy_static::lazy_static;
 use nix::sys::stat::{major, makedev, minor, mknod, Mode, SFlag};
-use regex::Regex;
 use rust_embed::RustEmbed;
 
 use crate::commands::create::custom_opts::CustomOptions;
 use crate::commands::create::domain::set_up_libvirt_domain_xml;
+use crate::commands::create::engine::Engine;
 use crate::commands::create::first_boot::FirstBootConfig;
-use crate::commands::create::runtime_env::RuntimeEnv;
 use crate::util::{
     bind_mount_dir_with_different_context, bind_mount_file, create_overlay_vm_image, crun,
     find_single_file_in_dirs, fix_selinux_label, is_mountpoint, set_file_context, SpecExt,
@@ -38,15 +36,9 @@ pub fn create(args: &liboci_cli::Create, raw_args: &[impl AsRef<OsStr>]) -> Resu
 
     let original_root_path: Utf8PathBuf = spec.root_path()?.canonicalize()?.try_into()?; // ensure absolute
 
-    let runtime_env = RuntimeEnv::current(&spec, &original_root_path)?;
-    let custom_options = CustomOptions::from_spec(&spec, runtime_env)?;
-
-    let is_bootc_container = is_bootc_container(
-        &args.container_id,
-        bundle_path,
-        &original_root_path,
-        runtime_env,
-    )?;
+    let engine = Engine::detect(&args.container_id, bundle_path, &spec, &original_root_path)?;
+    let custom_options = CustomOptions::from_spec(&spec, engine)?;
+    let is_bootc_container = is_bootc_container(&original_root_path, engine)?;
 
     ensure!(
         !is_bootc_container || !custom_options.emulated,
@@ -93,7 +85,7 @@ pub fn create(args: &liboci_cli::Create, raw_args: &[impl AsRef<OsStr>]) -> Resu
     let ssh_pub_key = set_up_ssh_key_pair(
         &mut spec,
         &custom_options,
-        runtime_env,
+        engine,
         &priv_dir_path,
         is_first_create,
     )?;
@@ -159,31 +151,13 @@ fn ensure_unprivileged(spec: &oci_spec::runtime::Spec) -> Result<()> {
     Ok(())
 }
 
-fn is_bootc_container(
-    container_id: &str,
-    bundle_path: &Utf8Path,
-    original_root_path: &Utf8Path,
-    env: RuntimeEnv,
-) -> Result<bool> {
-    lazy_static! {
-        static ref PATTERN: Regex = Regex::new(r"/overlay-containers/([^/]+)/userdata$").unwrap();
-    }
-
+fn is_bootc_container(original_root_path: &Utf8Path, engine: Engine) -> Result<bool> {
     let is_bootc_container = original_root_path.join("usr/lib/bootc/install").is_dir();
 
-    if is_bootc_container {
-        // check as much as we can that we're running under podman
-
-        let is_podman_bundle_path = match PATTERN.captures(bundle_path.as_str()) {
-            Some(captures) => &captures[1] == container_id,
-            None => false,
-        };
-
-        ensure!(
-            env == RuntimeEnv::Other && is_podman_bundle_path,
-            "bootc containers are only supported with Podman"
-        );
-    }
+    ensure!(
+        !is_bootc_container || engine == Engine::Podman,
+        "bootc containers are only supported with Podman"
+    );
 
     Ok(is_bootc_container)
 }
@@ -723,7 +697,7 @@ fn set_up_first_boot_config(
 fn set_up_ssh_key_pair(
     spec: &mut oci_spec::runtime::Spec,
     custom_options: &CustomOptions,
-    env: RuntimeEnv,
+    engine: Engine,
     priv_dir_path: &Utf8Path,
     is_first_create: bool,
 ) -> Result<String> {
@@ -741,7 +715,7 @@ fn set_up_ssh_key_pair(
     //   - We're not running under Kubernetes (where there isn't a "host user"); and
     //   - They have a key pair.
     let use_user_key_pair = !custom_options.random_ssh_key_pair
-        && env == RuntimeEnv::Other
+        && engine == Engine::Podman
         && user_ssh_dir.join("id_rsa.pub").is_file()
         && user_ssh_dir.join("id_rsa").is_file();
 

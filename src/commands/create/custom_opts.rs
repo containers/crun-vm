@@ -9,7 +9,7 @@ use clap::Parser;
 use lazy_static::lazy_static;
 use regex::Regex;
 
-use crate::commands::create::runtime_env::RuntimeEnv;
+use crate::commands::create::engine::Engine;
 
 #[derive(Clone, Debug)]
 pub struct Blockdev {
@@ -75,7 +75,7 @@ pub struct CustomOptions {
 }
 
 impl CustomOptions {
-    pub fn from_spec(spec: &oci_spec::runtime::Spec, env: RuntimeEnv) -> Result<Self> {
+    pub fn from_spec(spec: &oci_spec::runtime::Spec, engine: Engine) -> Result<Self> {
         let mut args: Vec<&String> = spec
             .process()
             .as_ref()
@@ -158,7 +158,7 @@ impl CustomOptions {
             ),
         );
 
-        if env == RuntimeEnv::Kubernetes {
+        if engine == Engine::Kubernetes {
             for blockdev in &mut options.blockdev {
                 blockdev.source = path_in_container_into_path_in_host(spec, &blockdev.source)?;
                 blockdev.target = path_in_container_into_path_in_host(spec, &blockdev.target)?;
