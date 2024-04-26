@@ -117,9 +117,10 @@ pub fn create(args: &liboci_cli::Create, raw_args: &[impl AsRef<OsStr>]) -> Resu
         fs::create_dir_all(&bootc_dir)?;
 
         std::process::Command::new(bootc_dir.join("prepare.sh"))
+            .arg(engine.command().unwrap())
+            .arg(&args.container_id)
             .arg(&original_root_path)
             .arg(&priv_dir_path)
-            .arg(&args.container_id)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -155,8 +156,8 @@ fn is_bootc_container(original_root_path: &Utf8Path, engine: Engine) -> Result<b
     let is_bootc_container = original_root_path.join("usr/lib/bootc/install").is_dir();
 
     ensure!(
-        !is_bootc_container || engine == Engine::Podman,
-        "bootc containers are only supported with Podman"
+        !is_bootc_container || engine == Engine::Podman || engine == Engine::Docker,
+        "bootc containers are only supported with Podman and Docker"
     );
 
     Ok(is_bootc_container)

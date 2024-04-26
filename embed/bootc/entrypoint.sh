@@ -35,6 +35,14 @@ fi
 
 # build disk image using bootc-install
 
+# TODO: `bootc install to-disk` currently fails when using docker-archive. Fix
+# the underlying issue to avoid this skopeo-copy command.
+skopeo copy --quiet \
+    docker-archive:/output/image.docker-archive \
+    oci-archive:/output/image.oci-archive
+
+rm /output/image.docker-archive
+
 PATH=/output/bin:$PATH bootc install to-disk \
     --source-imgref oci-archive:/output/image.oci-archive \
     --target-imgref "$image_name" \
