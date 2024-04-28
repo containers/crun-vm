@@ -5,6 +5,9 @@ trap 'exit 143' SIGTERM
 
 set -o errexit -o pipefail -o nounset
 
+# clean up locks that may have been left around from the container being killed
+rm -fr /var/lock
+
 mkdir -p \
     /etc/libvirt \
     /tmp \
