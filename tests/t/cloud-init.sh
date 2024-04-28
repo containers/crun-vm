@@ -19,18 +19,18 @@ EOF
 
     __engine run \
         --rm --detach \
-        --name cloud-init \
+        --name "$TEST_ID" \
         "$image" \
         --cloud-init "$TEMP_DIR"
 
     __test() {
-        __engine exec cloud-init --as "$user" "cmp $home/file <<< hello"
+        __engine exec "$TEST_ID" --as "$user" "cmp $home/file <<< hello"
     }
 
     __test
-    __engine restart cloud-init
+    __engine restart "$TEST_ID"
     __test
 
-    __engine stop cloud-init
+    __engine stop "$TEST_ID"
 
 done

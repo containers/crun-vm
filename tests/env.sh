@@ -392,6 +392,7 @@ run)
                 }
                 TEMP_DIR=~/$label.temp
                 UTIL_DIR=~/$label.util
+                TEST_ID=$label
                 ENGINE=$engine
                 export RUST_BACKTRACE=1 RUST_LIB_BACKTRACE=1
                 $( cat "$t" )\

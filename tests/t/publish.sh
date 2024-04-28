@@ -1,22 +1,22 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-trap '__engine stop publish' EXIT
+trap '__engine stop "$TEST_ID"' EXIT
 
 for os in fedora fedora-bootc; do
 
     image="${TEST_IMAGES[$os]}"
     user="${TEST_IMAGES_DEFAULT_USER[$os]}"
 
-    __engine run --rm --detach --name publish --publish 127.0.0.1::8000 "$image"
+    __engine run --rm --detach --name "$TEST_ID" --publish 127.0.0.1::8000 "$image"
 
-    endpoint=$( __engine port publish | tee /dev/stderr | cut -d' ' -f3 )
+    endpoint=$( __engine port "$TEST_ID" | tee /dev/stderr | cut -d' ' -f3 )
 
-    __engine exec publish --as "$user"
+    __engine exec "$TEST_ID" --as "$user"
 
     __log 'Ensuring curl fails...'
     ! curl "$endpoint" 2>/dev/null
 
-    __engine exec publish --as "$user" python -m http.server &
+    __engine exec "$TEST_ID" --as "$user" python -m http.server &
 
     __log 'Ensuring curl succeeds...'
 
@@ -28,6 +28,6 @@ for os in fedora fedora-bootc; do
         sleep 1
     done
 
-    __engine stop publish
+    __engine stop "$TEST_ID"
 
 done
