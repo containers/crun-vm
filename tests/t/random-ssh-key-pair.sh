@@ -7,3 +7,5 @@ __engine run \
     --random-ssh-key-pair
 
 __engine exec random-ssh-key-pair --as fedora
+__engine restart random-ssh-key-pair
+__engine exec random-ssh-key-pair --as fedora
