@@ -31,7 +31,7 @@ __test ""           '[[ -e i-was-here ]]'
 
 # ensure --persistent is rejected iff the rootfs is configured as read-only
 
-! __run --persistent --read-only
+! RUST_LIB_BACKTRACE=0 __run --persistent --read-only
 
 __run "" --read-only
 __engine exec persistent --as fedora
