@@ -411,7 +411,11 @@ run)
                     xargs --no-run-if-empty ${engine_cmd[*]} stop --time 0 \
                     >/dev/null 2>&1
                 ${engine_cmd[*]} ps --filter label=$label --format '{{.Names}}' --all |
-                    xargs --no-run-if-empty ${engine_cmd[*]} rm --force
+                    xargs --no-run-if-empty ${engine_cmd[*]} rm --force \
+                    >/dev/null 2>&1 \
+                    || true  # avoid 'removal already in progress' docker errors
+                ${engine_cmd[*]} ps --filter label=$label --format '{{.Names}}' --all |
+                    xargs --no-run-if-empty false  # fail if containers still exist
                 sudo rm -fr $label.temp $label.util
                 "
 
