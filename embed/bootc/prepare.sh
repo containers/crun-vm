@@ -7,6 +7,7 @@ engine=$1
 container_id=$2
 original_root=$3
 priv_dir=$4
+disk_size=$5
 
 __step() {
     printf "\033[36m%s\033[0m\n" "$*"
@@ -32,12 +33,38 @@ image_name=$( cut -f1 <<< "$image_info" )
 
 image_id=$( cut -f2 <<< "$image_info" )
 
+# determine disk size
+
+if [[ -z "$disk_size" ]]; then
+    container_image_size=$(
+        "$engine" image inspect --format '{{.VirtualSize}}' "$image_id"
+        )
+
+    # use double the container image size to allow for in-place updates
+    disk_size=$(( container_image_size * 2 ))
+
+    # round up to 1 MiB
+    alignment=$(( 2**20 ))
+    disk_size=$(( (disk_size + alignment - 1) / alignment * alignment ))
+fi
+
+truncate --size "$disk_size" "$bootc_dir/image.raw"
+disk_size=$( stat --format %s "$bootc_dir/image.raw" )
+
 # check if VM image is cached
 
 container_name=crun-vm-$container_id
 
-cache_image_label=crun-vm.from=$image_id
-cache_image_id=$( "$engine" images --filter "label=$cache_image_label" --format '{{.ID}}' --no-trunc )
+cache_image_labels=(
+    "crun-vm.from=$image_id"
+    "crun-vm.size=$disk_size"
+)
+
+cache_image_id=$(
+    "$engine" images \
+        "${cache_image_labels[@]/#/--filter=label=}" \
+        --format '{{.ID}}' --no-trunc
+    )
 
 if [[ -n "$cache_image_id" ]]; then
 
@@ -79,8 +106,6 @@ else
 
     # run bootc-install under krun
 
-    truncate --size 10G "$bootc_dir/image.raw"  # TODO: allow adjusting disk size
-
     trap 'krun delete --force "$container_name" >/dev/null 2>&1 || true' EXIT
     krun run --config "$bootc_dir/config.json" "$container_name" </dev/ptmx
     trap '' EXIT
@@ -90,14 +115,13 @@ else
     # convert image to qcow2 to get a lower file size
 
     qemu-img convert -f raw -O qcow2 "$bootc_dir/image.raw" "$bootc_dir/image.qcow2"
-    rm "$bootc_dir/image.raw"
 
     # cache VM image file as containerdisk
 
     __step "Caching VM image as a containerdisk..."
 
     id=$(
-        "$engine" build --quiet --file - --label "$cache_image_label" "$bootc_dir" <<-'EOF'
+        "$engine" build --quiet --file - "${cache_image_labels[@]/#/--label=}" "$bootc_dir" <<-'EOF'
         FROM scratch
         COPY image.qcow2 /
         ENTRYPOINT ["no-entrypoint"]
@@ -107,6 +131,8 @@ EOF
     echo "Stored as untagged container image with ID $id"
 
 fi
+
+rm "$bootc_dir/image.raw"
 
 __step "Booting VM..."
 
