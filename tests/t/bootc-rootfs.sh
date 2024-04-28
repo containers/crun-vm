@@ -3,7 +3,7 @@
 "$UTIL_DIR/extract-vm-image.sh" "${TEST_IMAGES[fedora-bootc]}" "$TEMP_DIR/image"
 
 __run() {
-    __engine run --rm --detach --name bootc-rootfs "$@" --rootfs "$TEMP_DIR"
+    __engine run --rm --detach --name "$TEST_ID" "$@" --rootfs "$TEMP_DIR"
 }
 
 ! __run
