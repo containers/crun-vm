@@ -311,7 +311,7 @@ run)
     esac
 
     if (( $# == 3 )) && [[ "$3" == all ]]; then
-        mapfile -d '' -t tests < <( find "$repo_root/tests/t" -type f -print0 )
+        mapfile -d '' -t tests < <( find "$repo_root/tests/t" -type f -print0 | sort -z )
     else
         tests=( "${@:3}" )
     fi
