@@ -19,7 +19,12 @@ __log 'Ensuring curl fails...'
 __engine exec publish --as "$user" python -m http.server &
 trap '__engine stop publish' EXIT
 
-sleep 3
-
 __log 'Ensuring curl succeeds...'
-[[ "$( curl "$endpoint" 2>/dev/null | head -1 )" == "<!DOCTYPE HTML>" ]]
+
+i=0
+max_tries=30
+
+until [[ "$( curl "$endpoint" 2>/dev/null )" == '<!DOCTYPE HTML>'* ]]; do
+    (( ++i < max_tries ))
+    sleep 1
+done
