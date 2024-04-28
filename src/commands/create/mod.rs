@@ -14,7 +14,9 @@ use std::process::{Command, Stdio};
 
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
+use lazy_static::lazy_static;
 use nix::sys::stat::{major, makedev, minor, mknod, Mode, SFlag};
+use regex::Regex;
 use rust_embed::RustEmbed;
 
 use crate::commands::create::custom_opts::CustomOptions;
@@ -38,12 +40,7 @@ pub fn create(args: &liboci_cli::Create, raw_args: &[impl AsRef<OsStr>]) -> Resu
 
     let engine = Engine::detect(&args.container_id, bundle_path, &spec, &original_root_path)?;
     let custom_options = CustomOptions::from_spec(&spec, engine)?;
-    let is_bootc_container = is_bootc_container(&original_root_path, engine)?;
-
-    ensure!(
-        !is_bootc_container || !custom_options.emulated,
-        "--emulated is incompatible with bootable containers"
-    );
+    let is_bootc_container = is_bootc_container(&original_root_path, &custom_options, engine)?;
 
     // We include container_id in our paths to ensure no overlap with the user container's contents.
     let priv_dir_path = original_root_path.join(format!("crun-vm-{}", args.container_id));
@@ -121,6 +118,7 @@ pub fn create(args: &liboci_cli::Create, raw_args: &[impl AsRef<OsStr>]) -> Resu
             .arg(&args.container_id)
             .arg(&original_root_path)
             .arg(&priv_dir_path)
+            .arg(custom_options.bootc_disk_size.unwrap_or_default())
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -152,13 +150,42 @@ fn ensure_unprivileged(spec: &oci_spec::runtime::Spec) -> Result<()> {
     Ok(())
 }
 
-fn is_bootc_container(original_root_path: &Utf8Path, engine: Engine) -> Result<bool> {
+fn is_bootc_container(
+    original_root_path: &Utf8Path,
+    custom_options: &CustomOptions,
+    engine: Engine,
+) -> Result<bool> {
     let is_bootc_container = original_root_path.join("usr/lib/bootc/install").is_dir();
 
     ensure!(
         !is_bootc_container || engine == Engine::Podman || engine == Engine::Docker,
         "bootc containers are only supported with Podman and Docker"
     );
+
+    ensure!(
+        !is_bootc_container || !custom_options.emulated,
+        "--emulated is incompatible with bootable containers"
+    );
+
+    if let Some(size) = &custom_options.bootc_disk_size {
+        lazy_static! {
+            static ref SIZE_PATTERN: Regex = Regex::new(r"^[0-9]+[KMGT]?$").unwrap();
+        }
+
+        ensure!(
+            SIZE_PATTERN.is_match(size),
+            concat!(
+                "--bootc-disk-size value must be a number followed by an optional suffix K",
+                " (kilobyte, 1024), M (megabyte, 1024k), G (gigabyte, 1024M), or T (terabyte,",
+                " 1024G)",
+            )
+        );
+
+        ensure!(
+            is_bootc_container,
+            "--bootc-disk-size only applies to bootable containers"
+        );
+    }
 
     Ok(is_bootc_container)
 }

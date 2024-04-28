@@ -111,6 +111,10 @@ $ podman run \
 Internally, crun-vm generates a VM image from the bootable container and then
 boots it.
 
+By default, the VM image is given a disk size roughly double the size of the
+bootc container image. To change this, use the `--bootc-disk-size <size>[KMGT]`
+option.
+
 ## First-boot customization
 
 ### cloud-init

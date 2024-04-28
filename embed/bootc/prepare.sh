@@ -7,6 +7,7 @@ engine=$1
 container_id=$2
 original_root=$3
 priv_dir=$4
+disk_size=$5
 
 __step() {
     printf "\033[36m%s\033[0m\n" "$*"
@@ -79,7 +80,20 @@ else
 
     # run bootc-install under krun
 
-    truncate --size 10G "$bootc_dir/image.raw"  # TODO: allow adjusting disk size
+    if [[ -z "$disk_size" ]]; then
+        container_image_size=$(
+            "$engine" image inspect --format '{{.VirtualSize}}' "$image_id"
+            )
+
+        # use double the container image size to allow for in-place updates
+        disk_size=$(( container_image_size * 2 ))
+
+        # round up to 1 MiB
+        alignment=$(( 2**20 ))
+        disk_size=$(( (disk_size + alignment - 1) / alignment * alignment ))
+    fi
+
+    truncate --size "$disk_size" "$bootc_dir/image.raw"
 
     trap 'krun delete --force "$container_name" >/dev/null 2>&1 || true' EXIT
     krun run --config "$bootc_dir/config.json" "$container_name" </dev/ptmx

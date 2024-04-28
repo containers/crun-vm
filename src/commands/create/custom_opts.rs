@@ -56,6 +56,9 @@ pub struct CustomOptions {
     pub emulated: bool,
 
     #[clap(long)]
+    pub bootc_disk_size: Option<String>,
+
+    #[clap(long)]
     pub cloud_init: Option<Utf8PathBuf>,
 
     #[clap(long)]
