@@ -9,7 +9,6 @@ command=( "${@:3}" )
 
 __ssh() {
     ssh \
-        -o LogLevel=ERROR \
         -o StrictHostKeyChecking=no \
         -o UserKnownHostsFile=/dev/null \
         -l "$user" \
@@ -39,7 +38,7 @@ if [[ ! -e /crun-vm/ssh-successful ]]; then
         sleep 1
 
         if (( exit_code != 255 )) ||
-            ! grep -iqE "Connection refused|Connection reset by peer|Connection closed by remote host" <<< "$output"; then
+            ! grep -iqE "System is booting up|Connection refused|Connection reset by peer|Connection closed by remote host" <<< "$output"; then
             break
         fi
 
@@ -56,4 +55,4 @@ if [[ ! -e /crun-vm/ssh-successful ]]; then
 
 fi
 
-__ssh -- "${command[@]}"
+__ssh -o LogLevel=ERROR -- "${command[@]}"
