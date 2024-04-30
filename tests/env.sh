@@ -56,7 +56,7 @@ COMMANDS
    run <engine> <test_script>
    run <engine> all
       Run a test script in the test env VM under the given engine. <engine> must
-      be one of 'docker', 'podman', 'rootful-podman', or 'all'.
+      be one of 'podman', 'rootful-podman', 'docker', or 'all'.
 
    ssh
       SSH into the test env VM for debugging.
@@ -267,9 +267,9 @@ start)
         __log_and_run podman save "$image" -o "$temp_dir/image.tar"
 
         __exec cp /home/fedora/images/image.tar image.tar
-        __exec sudo docker load -i image.tar
         __exec podman      load -i image.tar
         __exec sudo podman load -i image.tar
+        __exec sudo docker load -i image.tar
         __exec rm image.tar
 
         rm "$temp_dir/image.tar"
@@ -298,11 +298,11 @@ run)
     fi
 
     case "$2" in
-    docker|podman|rootful-podman)
+    podman|rootful-podman|docker)
         engines=( "$2" )
         ;;
     all)
-        engines=( docker podman rootful-podman )
+        engines=( podman rootful-podman docker )
         ;;
     *)
         __bad_usage
@@ -329,10 +329,6 @@ run)
             __big_log 33 'Running test %s under %s...' "$( __rel "$t" )" "$engine"
 
             case "$engine" in
-            docker)
-                engine_cmd=( sudo docker )
-                runtime_in_env=crun-vm
-                ;;
             podman)
                 engine_cmd=( podman )
                 runtime_in_env=/home/fedora/target/debug/crun-vm
@@ -340,6 +336,10 @@ run)
             rootful-podman)
                 engine_cmd=( sudo podman )
                 runtime_in_env=/home/fedora/target/debug/crun-vm
+                ;;
+            docker)
+                engine_cmd=( sudo docker )
+                runtime_in_env=crun-vm
                 ;;
             esac
 
