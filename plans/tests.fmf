@@ -45,11 +45,6 @@ execute:
     tests/env.sh start
     tests/env.sh run "$ENGINE" all
 
-/docker:
-  summary: Run all tests under Docker
-  environment:
-    ENGINE: docker
-
 /podman:
   summary: Run all tests under Podman
   environment:
@@ -59,3 +54,8 @@ execute:
   summary: Run all tests under Rootful Podman
   environment:
     ENGINE: rootful-podman
+
+/docker:
+  summary: Run all tests under Docker
+  environment:
+    ENGINE: docker

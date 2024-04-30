@@ -13,13 +13,13 @@ jobs:
       - fedora-rawhide-x86_64
       - fedora-40-x86_64
       - fedora-39-x86_64
-    identifier: docker
-    tmt_plan: /tests/docker
-
-  - <<: *tests
     identifier: podman
     tmt_plan: /tests/podman
 
   - <<: *tests
     identifier: rootful-podman
     tmt_plan: /tests/rootful-podman
+
+  - <<: *tests
+    identifier: docker
+    tmt_plan: /tests/docker
