@@ -1,43 +1,7 @@
----
 # See the documentation for more information:
 # https://packit.dev/docs/configuration/
 
-specfile_path: rpm/crun-vm.spec
-
-srpm_build_deps:
-  - cargo
-  - make
-  - openssl-devel
-
 jobs:
-  - job: copr_build
-    trigger: pull_request
-    notifications:
-      failure_comment:
-        message: "Ephemeral COPR build failed. @containers/packit-build please check."
-    targets:
-      fedora-all-x86_64: {}
-      fedora-all-aarch64: {}
-      fedora-eln-x86_64:
-        additional_repos:
-          - "https://kojipkgs.fedoraproject.org/repos/eln-build/latest/x86_64/"
-      fedora-eln-aarch64:
-        additional_repos:
-          - "https://kojipkgs.fedoraproject.org/repos/eln-build/latest/aarch64/"
-    additional_repos:
-      - "copr://rhcontainerbot/podman-next"
-    enable_net: true
-
-  # Run on commit to main branch
-  - job: copr_build
-    trigger: commit
-    notifications:
-      failure_comment:
-        message: "podman-next COPR build failed. @containers/packit-build please check."
-    branch: main
-    owner: rhcontainerbot
-    project: podman-next
-    enable_net: true
 
   - &tests
     job: tests
