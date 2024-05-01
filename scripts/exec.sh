@@ -20,6 +20,17 @@ if [[ ! -e /crun-vm/ssh-successful ]]; then
 
     # retry ssh for some time, ignoring some common errors
 
+    ignore_errors=(
+        "Connection closed by remote host"
+        "Connection refused"
+        "Connection reset by peer"
+        "Pseudo-terminal will not be allocated because stdin is not a terminal"
+        "System is booting up"
+    )
+
+    ignore_pattern=$( printf "|%s" "${ignore_errors[@]}" )
+    ignore_pattern=${ignore_pattern:1}
+
     start_time=$( date +%s )
     end_time=$(( start_time + timeout ))
 
@@ -37,8 +48,7 @@ if [[ ! -e /crun-vm/ssh-successful ]]; then
 
         sleep 1
 
-        if (( exit_code != 255 )) ||
-            ! grep -iqE "System is booting up|Connection refused|Connection reset by peer|Connection closed by remote host" <<< "$output"; then
+        if (( exit_code != 255 )) || ! grep -iqE "$ignore_pattern" <<< "$output"; then
             break
         fi
 
