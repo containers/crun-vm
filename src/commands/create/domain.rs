@@ -45,11 +45,7 @@ fn generate(
     s(&mut w, "domain", &[("type", domain_type)], |w| {
         st(w, "name", &[], "domain")?;
 
-        let cpu_mode = match custom_options.emulated {
-            true => "maximum",
-            false => "host-passthrough",
-        };
-        se(w, "cpu", &[("mode", cpu_mode)])?;
+        se(w, "cpu", &[("mode", "maximum")])?;
 
         let vcpus = get_vcpu_count(spec).to_string();
         if let Some(cpu_set) = get_cpu_set(spec) {
