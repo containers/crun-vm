@@ -1,0 +1,24 @@
+{
+    /*
+    Configuration Reference:
+    https://docs.renovatebot.com/configuration-options/
+
+    Monitoring Dashboard:
+    https://app.renovatebot.com/dashboard#github/containers
+
+    Configuration Update/Change Procedure:
+        1. Make changes
+        2. Manually validate changes (from repo-root):
+            ```bash
+            $ podman run -it \
+                -v ./.github/renovate.json5:/usr/src/app/renovate.json5:z \
+                ghcr.io/renovatebot/renovate:latest \
+                renovate-config-validator
+            ```
+        3. Commit.
+    */
+    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+    "extends": [
+        "github>containers/automation//renovate/defaults.json5"
+    ]
+}
