@@ -13,6 +13,7 @@ prepare:
       - crun
       - docker
       - genisoimage
+      - golang-github-cpuguy83-md2man
       - grep
       - guestfs-tools
       - libselinux-devel

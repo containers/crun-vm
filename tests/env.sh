@@ -182,6 +182,7 @@ build)
         docker \
         genisoimage \
         grep \
+        golang-github-cpuguy83-md2man \
         htop \
         libselinux-devel \
         libvirt-client \
