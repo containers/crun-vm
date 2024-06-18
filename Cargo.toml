@@ -61,7 +61,7 @@ version = "1.0"
 version = "1.0"
 
 [dependencies.serde_yaml]
-version = "0.9.0"
+version = "0.9.34"
 
 [dependencies.urlencoding]
 version = "2.0"
