@@ -17,7 +17,7 @@ default-features = false
 features = ["cargo", "derive", "std"]
 
 [dependencies.home]
-version = "0.5.0"
+version = "0.5.9"
 
 [dependencies.lazy_static]
 version = "1.1"
