@@ -20,7 +20,7 @@ features = ["cargo", "derive", "std"]
 version = "0.5.9"
 
 [dependencies.lazy_static]
-version = "1.1"
+version = "1.4.0"
 default-features = false
 
 [dependencies.liboci-cli]
