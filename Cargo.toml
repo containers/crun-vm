@@ -6,7 +6,7 @@ rust-version = "1.74"
 license = "GPL-2.0-or-later"
 
 [dependencies.anyhow]
-version = "1.0.77"
+version = "1.0.86"
 
 [dependencies.camino]
 version = "1.1"
