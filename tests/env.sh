@@ -13,18 +13,21 @@ declare -A TEST_IMAGES
 TEST_IMAGES=(
     [fedora]=quay.io/containerdisks/fedora:40          # uses cloud-init
     [coreos]=quay.io/crun-vm/example-fedora-coreos:40  # uses Ignition
+    [fedora-bootc]=quay.io/fedora/fedora-bootc:40      # bootable container
 )
 
 declare -A TEST_IMAGES_DEFAULT_USER
 TEST_IMAGES_DEFAULT_USER=(
     [fedora]=fedora
     [coreos]=core
+    [fedora-bootc]=cloud-user
 )
 
 declare -A TEST_IMAGES_DEFAULT_USER_HOME
 TEST_IMAGES_DEFAULT_USER_HOME=(
     [fedora]=/home/fedora
     [coreos]=/var/home/core
+    [fedora-bootc]=/var/home/cloud-user
 )
 
 __bad_usage() {
@@ -53,7 +56,7 @@ COMMANDS
    run <engine> <test_script>
    run <engine> all
       Run a test script in the test env VM under the given engine. <engine> must
-      be one of 'docker', 'podman', 'rootful-podman', or 'all'.
+      be one of 'podman', 'rootful-podman', 'docker', or 'all'.
 
    ssh
       SSH into the test env VM for debugging.
@@ -140,12 +143,12 @@ build)
 
     # expand base image
 
-    __log_and_run qemu-img create -f qcow2 "$temp_dir/resized-image.qcow2" 20G
+    __log_and_run qemu-img create -f qcow2 "$temp_dir/image.qcow2" 50G
     __log_and_run virt-resize \
         --quiet \
         --expand /dev/sda4 \
         "$temp_dir/image" \
-        "$temp_dir/resized-image.qcow2"
+        "$temp_dir/image.qcow2"
 
     rm "$temp_dir/image"
 
@@ -179,6 +182,7 @@ build)
         bash \
         coreutils \
         crun \
+        crun-krun \
         docker \
         genisoimage \
         grep \
@@ -210,17 +214,12 @@ build)
     __log_and_run podman wait --ignore "$container_name-build"
     __extra_cleanup() { :; }
 
-    __log_and_run virt-sparsify \
-        --quiet \
-        "$temp_dir/resized-image.qcow2" \
-        "$temp_dir/final-image.qcow2"
-
-    rm "$temp_dir/resized-image.qcow2"
+    __log_and_run virt-sparsify --quiet --in-place "$temp_dir/image.qcow2"
 
     # package new image file
 
     __log_and_run "$( __rel "$repo_root/util/package-vm-image.sh" )" \
-        "$temp_dir/final-image.qcow2" \
+        "$temp_dir/image.qcow2" \
         "$env_image"
 
     __big_log 33 'Done.'
@@ -268,9 +267,9 @@ start)
         __log_and_run podman save "$image" -o "$temp_dir/image.tar"
 
         __exec cp /home/fedora/images/image.tar image.tar
-        __exec sudo docker load -i image.tar
         __exec podman      load -i image.tar
         __exec sudo podman load -i image.tar
+        __exec sudo docker load -i image.tar
         __exec rm image.tar
 
         rm "$temp_dir/image.tar"
@@ -299,11 +298,11 @@ run)
     fi
 
     case "$2" in
-    docker|podman|rootful-podman)
+    podman|rootful-podman|docker)
         engines=( "$2" )
         ;;
     all)
-        engines=( docker podman rootful-podman )
+        engines=( podman rootful-podman docker )
         ;;
     *)
         __bad_usage
@@ -330,10 +329,6 @@ run)
             __big_log 33 'Running test %s under %s...' "$( __rel "$t" )" "$engine"
 
             case "$engine" in
-            docker)
-                engine_cmd=( sudo docker )
-                runtime_in_env=crun-vm
-                ;;
             podman)
                 engine_cmd=( podman )
                 runtime_in_env=/home/fedora/target/debug/crun-vm
@@ -341,6 +336,10 @@ run)
             rootful-podman)
                 engine_cmd=( sudo podman )
                 runtime_in_env=/home/fedora/target/debug/crun-vm
+                ;;
+            docker)
+                engine_cmd=( sudo docker )
+                runtime_in_env=crun-vm
                 ;;
             esac
 
@@ -393,6 +392,7 @@ run)
                 }
                 TEMP_DIR=~/$label.temp
                 UTIL_DIR=~/$label.util
+                TEST_ID=$label
                 ENGINE=$engine
                 export RUST_BACKTRACE=1 RUST_LIB_BACKTRACE=1
                 $( cat "$t" )\
