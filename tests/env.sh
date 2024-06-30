@@ -13,18 +13,21 @@ declare -A TEST_IMAGES
 TEST_IMAGES=(
     [fedora]=quay.io/containerdisks/fedora:40          # uses cloud-init
     [coreos]=quay.io/crun-vm/example-fedora-coreos:40  # uses Ignition
+    [fedora-bootc]=quay.io/fedora/fedora-bootc:40      # bootable container
 )
 
 declare -A TEST_IMAGES_DEFAULT_USER
 TEST_IMAGES_DEFAULT_USER=(
     [fedora]=fedora
     [coreos]=core
+    [fedora-bootc]=cloud-user
 )
 
 declare -A TEST_IMAGES_DEFAULT_USER_HOME
 TEST_IMAGES_DEFAULT_USER_HOME=(
     [fedora]=/home/fedora
     [coreos]=/var/home/core
+    [fedora-bootc]=/var/home/cloud-user
 )
 
 __bad_usage() {
@@ -122,6 +125,15 @@ trap '__extra_cleanup; rm -fr "$temp_dir"' EXIT
 
 export RUST_BACKTRACE=1 RUST_LIB_BACKTRACE=1
 
+arch=$( uname -m )
+case "$arch" in
+x86_64|aarch64)
+    ;;
+*)
+    >&2 echo "Unsupported arch \"$arch\""
+    ;;
+esac
+
 case "${1:-}" in
 build)
     if (( $# != 1 )); then
@@ -140,21 +152,37 @@ build)
 
     # expand base image
 
-    __log_and_run qemu-img create -f qcow2 "$temp_dir/resized-image.qcow2" 20G
+    root_part=$(
+        virt-filesystems --add "$temp_dir/image" --long |
+            awk '/^\/dev\// {if ($4 == "fedora") print $1}'
+        )
+
+    __log_and_run qemu-img create -f qcow2 "$temp_dir/image.qcow2" 20G
     __log_and_run virt-resize \
         --quiet \
-        --expand /dev/sda4 \
+        --expand "$root_part" \
         "$temp_dir/image" \
-        "$temp_dir/resized-image.qcow2"
+        "$temp_dir/image.qcow2"
 
     rm "$temp_dir/image"
+
+    # enable nested virtualization
+
+    if [[ "$arch" == aarch64 ]]; then
+        __log_and_run virt-customize \
+            --quiet \
+            --no-network \
+            --add "$temp_dir/image.qcow2" \
+            --append-line '/etc/default/grub:GRUB_CMDLINE_LINUX_DEFAULT="kvm-arm.mode=nested"' \
+            --run-command 'grub2-mkconfig -o /boot/grub2/grub.cfg'
+    fi
 
     # launch VM from base image file
 
     __log_and_run podman run \
         --name "$container_name-build" \
         --runtime "$runtime" \
-        --memory 8g \
+        --memory 4g \
         --rm -dit \
         --rootfs "$temp_dir" \
         --persistent
@@ -174,11 +202,21 @@ build)
     # get a predictable keypair
     __exec 'ssh-keygen -q -f .ssh/id_rsa -N "" && sudo cp -r .ssh /root/'
 
+    case "$arch" in
+    x86_64)
+        qemu_system_pkg=qemu-system-x86-core
+        ;;
+    aarch64)
+        qemu_system_pkg=qemu-system-aarch64-core
+        ;;
+    esac
+
     __exec sudo dnf update -y
     __exec sudo dnf install -y \
         bash \
         coreutils \
         crun \
+        crun-krun \
         docker \
         genisoimage \
         grep \
@@ -191,7 +229,7 @@ build)
         openssh-clients \
         podman \
         qemu-img \
-        qemu-system-x86-core \
+        "$qemu_system_pkg" \
         shadow-utils \
         util-linux \
         virtiofsd
@@ -210,17 +248,12 @@ build)
     __log_and_run podman wait --ignore "$container_name-build"
     __extra_cleanup() { :; }
 
-    __log_and_run virt-sparsify \
-        --quiet \
-        "$temp_dir/resized-image.qcow2" \
-        "$temp_dir/final-image.qcow2"
-
-    rm "$temp_dir/resized-image.qcow2"
+    __log_and_run virt-sparsify --quiet --in-place "$temp_dir/image.qcow2"
 
     # package new image file
 
     __log_and_run "$( __rel "$repo_root/util/package-vm-image.sh" )" \
-        "$temp_dir/final-image.qcow2" \
+        "$temp_dir/image.qcow2" \
         "$env_image"
 
     __big_log 33 'Done.'
@@ -255,11 +288,15 @@ start)
         __log_and_run podman stop --time 0 "$container_name"
     }
 
-    # load test images onto VM
+    # ensure nested hardware-accelerated virt is supported
 
     __exec() {
         __log_and_run podman exec "$container_name" --as fedora "$@"
     }
+
+    __exec '[[ -e /dev/kvm ]] || { sudo dmesg; exit 1; }'
+
+    # load test images onto VM
 
     chmod a+rx "$temp_dir"  # so user "fedora" in guest can access it
 
@@ -393,6 +430,7 @@ run)
                 }
                 TEMP_DIR=~/$label.temp
                 UTIL_DIR=~/$label.util
+                TEST_ID=$label
                 ENGINE=$engine
                 export RUST_BACKTRACE=1 RUST_LIB_BACKTRACE=1
                 $( cat "$t" )\
