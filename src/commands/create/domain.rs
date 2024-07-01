@@ -58,11 +58,13 @@ fn generate(
         st(w, "memory", &[("unit", "b")], memory.as_str())?;
 
         s(w, "os", &[("firmware", "efi")], |w| {
-            let attrs = match ["x86", "x86_64"].contains(&env::consts::ARCH) {
-                true => [("machine", "q35")].as_slice(),
-                false => [].as_slice(), // use libvirt's default
-            };
-            st(w, "type", attrs, "hvm")?;
+            let guest_arch = vm_image_info.arch.as_deref().unwrap_or(env::consts::ARCH);
+
+            let mut attrs = vec![("arch", guest_arch)];
+            if ["x86", "x86_64"].contains(&guest_arch) {
+                attrs.push(("machine", "q35"));
+            }
+            st(w, "type", &attrs, "hvm")?;
 
             s(w, "firmware", &[], |w| {
                 se(w, "feature", &[("enabled", "no"), ("name", "secure-boot")])

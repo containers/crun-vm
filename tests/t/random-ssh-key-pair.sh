@@ -2,10 +2,10 @@
 
 __engine run \
     --detach \
-    --name random-ssh-key-pair \
+    --name "$TEST_ID" \
     "${TEST_IMAGES[fedora]}" \
     --random-ssh-key-pair
 
-__engine exec random-ssh-key-pair --as fedora
-__engine restart random-ssh-key-pair
-__engine exec random-ssh-key-pair --as fedora
+__engine exec "$TEST_ID" --as fedora
+__engine restart "$TEST_ID"
+__engine exec "$TEST_ID" --as fedora

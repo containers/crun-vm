@@ -26,14 +26,14 @@ EOF
 
 __engine run \
     --rm --detach \
-    --name ignition \
+    --name "$TEST_ID" \
     "$image" \
     --ignition "$TEMP_DIR/config.ign"
 
 __test() {
-    __engine exec ignition --as "$user" "cmp $home/file <<< hello"
+    __engine exec "$TEST_ID" --as "$user" "cmp $home/file <<< hello"
 }
 
 __test
-__engine restart ignition
+__engine restart "$TEST_ID"
 __test

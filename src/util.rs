@@ -1,26 +1,46 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+use std::env;
 use std::ffi::{c_char, CString, OsStr};
 use std::fs::{self, OpenOptions, Permissions};
-use std::io::{self, ErrorKind};
+use std::io::{self, ErrorKind, Write};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::process::{Command, Stdio};
+use std::str;
 
 use anyhow::{anyhow, bail, ensure, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use nix::mount::{MntFlags, MsFlags};
 use serde::Deserialize;
 
+// When the container image's entrypoint is /sbin/init or similar, Podman gives the entrypoint (and
+// exec entrypoint) process an SELinux label of, for instance:
+//
+//     system_u:system_r:container_init_t:s0:c276,c638
+//
+// However, we are going to change our entrypoint to something else, so we need to use the
+// "standard" label that Podman otherwise gives, which in this case would be:
+//
+//     system_u:system_r:container_t:s0:c276,c638
+//
+// This function performs that mapping.
+pub fn fix_selinux_label(process: &mut oci_spec::runtime::Process) {
+    if let Some(label) = process.selinux_label() {
+        let new_label = label.replace("container_init_t", "container_t");
+        process.set_selinux_label(Some(new_label));
+    }
+}
+
 pub fn set_file_context(path: impl AsRef<Utf8Path>, context: &str) -> Result<()> {
     extern "C" {
-        fn setfilecon(path: *const c_char, con: *const c_char) -> i32;
+        fn lsetfilecon(path: *const c_char, con: *const c_char) -> i32;
     }
 
     let path = CString::new(path.as_ref().as_os_str().as_bytes())?;
     let context = CString::new(context.as_bytes())?;
 
-    if unsafe { setfilecon(path.as_ptr(), context.as_ptr()) } != 0 {
+    if unsafe { lsetfilecon(path.as_ptr(), context.as_ptr()) } != 0 {
         return Err(io::Error::last_os_error().into());
     }
 
@@ -179,7 +199,7 @@ pub trait SpecExt {
         linux_device_cgroup: oci_spec::runtime::LinuxDeviceCgroup,
     );
     fn process_capabilities_insert_beip(&mut self, capability: oci_spec::runtime::Capability);
-    fn linux_seccomp_syscalls_push(&mut self, linux_syscall: oci_spec::runtime::LinuxSyscall);
+    fn linux_seccomp_syscalls_push_front(&mut self, linux_syscall: oci_spec::runtime::LinuxSyscall);
 }
 
 impl SpecExt for oci_spec::runtime::Spec {
@@ -257,7 +277,10 @@ impl SpecExt for oci_spec::runtime::Spec {
         });
     }
 
-    fn linux_seccomp_syscalls_push(&mut self, linux_syscall: oci_spec::runtime::LinuxSyscall) {
+    fn linux_seccomp_syscalls_push_front(
+        &mut self,
+        linux_syscall: oci_spec::runtime::LinuxSyscall,
+    ) {
         self.set_linux({
             let mut linux = self.linux().clone().expect("linux config");
             linux.set_seccomp({
@@ -265,7 +288,7 @@ impl SpecExt for oci_spec::runtime::Spec {
                 if let Some(seccomp) = &mut seccomp {
                     seccomp.set_syscalls({
                         let mut syscalls = seccomp.syscalls().clone().unwrap_or_default();
-                        syscalls.push(linux_syscall);
+                        syscalls.insert(0, linux_syscall);
                         Some(syscalls)
                     });
                 }
@@ -314,6 +337,9 @@ pub struct VmImageInfo {
     #[serde(skip)]
     pub path: Utf8PathBuf,
 
+    #[serde(skip)]
+    pub arch: Option<String>,
+
     #[serde(rename = "virtual-size")]
     pub size: u64,
 
@@ -321,7 +347,7 @@ pub struct VmImageInfo {
 }
 
 impl VmImageInfo {
-    pub fn of(vm_image_path: impl AsRef<Utf8Path>) -> Result<VmImageInfo> {
+    pub fn of(vm_image_path: impl AsRef<Utf8Path>, identify_arch: bool) -> Result<VmImageInfo> {
         let vm_image_path = vm_image_path.as_ref().to_path_buf();
 
         let output = Command::new("qemu-img")
@@ -339,6 +365,12 @@ impl VmImageInfo {
 
         let mut info: VmImageInfo = serde_json::from_slice(&output.stdout)?;
         info.path = vm_image_path;
+
+        if identify_arch {
+            info.arch = identify_image_arch(&info.path)?
+                .ok_or_else(|| anyhow!("Could not identify VM image architecture"))?
+                .into();
+        }
 
         Ok(info)
     }
@@ -369,6 +401,62 @@ pub fn create_overlay_vm_image(
     );
 
     Ok(())
+}
+
+pub fn identify_image_arch(image_path: impl AsRef<Utf8Path>) -> Result<Option<String>> {
+    let xml = virt_inspector([
+        "--add",
+        image_path.as_ref().as_str(),
+        "--no-applications",
+        "--no-icon",
+    ])?;
+
+    xpath(&xml, "string(//arch)")
+}
+
+fn virt_inspector(args: impl IntoIterator<Item = impl AsRef<OsStr>>) -> Result<String> {
+    let cache_dir = format!("/var/tmp/crun-vm-{}", env::var("_CONTAINERS_ROOTLESS_UID")?);
+    fs::create_dir_all(&cache_dir)?;
+
+    let output = Command::new("virt-inspector")
+        .args(args)
+        .env("LIBGUESTFS_BACKEND", "direct")
+        .env("LIBGUESTFS_CACHEDIR", &cache_dir)
+        .output()?;
+
+    ensure!(
+        output.status.success(),
+        "virt-inspector failed: {}",
+        String::from_utf8_lossy(&output.stderr),
+    );
+
+    Ok(String::from_utf8(output.stdout)?)
+}
+
+fn xpath(xml: &str, path: &str) -> Result<Option<String>> {
+    let mut child = Command::new("virt-inspector")
+        .arg("--xpath")
+        .arg(path)
+        .stdin(Stdio::piped())
+        .spawn()?;
+
+    child.stdin.take().unwrap().write_all(xml.as_bytes())?;
+
+    let output = child.wait_with_output()?;
+
+    ensure!(
+        output.status.success(),
+        "virt-inspector --xpath failed: {}",
+        String::from_utf8_lossy(&output.stderr),
+    );
+
+    let result = String::from_utf8(output.stdout)?;
+
+    if result.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(result))
+    }
 }
 
 /// Run `crun`.

@@ -96,6 +96,25 @@ in a container image.
 Note that flag `--persistent` has no effect when running VMs from container
 images.
 
+### From bootable container images
+
+crun-vm can also work with [bootable container images], which are containers
+that package a full operating system:
+
+```console
+$ podman run \
+    --runtime crun-vm \
+    -it --rm \
+    quay.io/fedora/fedora-bootc:40
+```
+
+Internally, crun-vm generates a VM image from the bootable container and then
+boots it.
+
+By default, the VM image is given a disk size roughly double the size of the
+bootc container image. To change this, use the `--bootc-disk-size <size>[KMGT]`
+option.
+
 ## First-boot customization
 
 ### cloud-init
@@ -317,8 +336,12 @@ $ podman run \
 ### System emulation
 
 To use system emulation instead of hardware-assisted virtualization, specify the
-`--emulated` flag. Without this flag, attempting to create a VM on a host tbat
-doesn't support KVM will fail.
+`--emulated` flag. Without this flag, attempting to create a VM from a guest
+with a different architecture from the host's or on a host that doesn't support
+KVM will fail.
+
+It's not currently possible to use this flag when the container image is a bootc
+bootable container.
 
 ### Inspecting and customizing the libvirt domain XML
 
@@ -340,6 +363,7 @@ be merged with it using the non-standard option `--merge-libvirt-xml <file>`.
 > Before using this flag, consider if you would be better served using libvirt
 > directly to manage your VM.
 
+[bootable container images]: https://containers.github.io/bootable/
 [cloud-init]: https://cloud-init.io/
 [domain XML definition]: https://libvirt.org/formatdomain.html
 [Ignition]: https://coreos.github.io/ignition/
