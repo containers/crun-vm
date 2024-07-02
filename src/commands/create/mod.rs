@@ -685,10 +685,10 @@ fn adjust_container_rlimits_and_resources(spec: &mut oci_spec::runtime::Spec) {
 
             // Forwarding all UDP and TCP traffic requires passt to open many sockets. Ensure that
             // the container's RLIMIT_NOFILE is large enough.
-            rlimits.retain(|rl| rl.typ() != oci_spec::runtime::LinuxRlimitType::RlimitNofile);
+            rlimits.retain(|rl| rl.typ() != oci_spec::runtime::PosixRlimitType::RlimitNofile);
             rlimits.push(
-                oci_spec::runtime::LinuxRlimitBuilder::default()
-                    .typ(oci_spec::runtime::LinuxRlimitType::RlimitNofile)
+                oci_spec::runtime::PosixRlimitBuilder::default()
+                    .typ(oci_spec::runtime::PosixRlimitType::RlimitNofile)
                     .hard(262144u64)
                     .soft(262144u64)
                     .build()
