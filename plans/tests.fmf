@@ -38,8 +38,8 @@ execute:
 
     # set the test VM's Fedora version to the host's to run the tests under the
     # requested environment
-    tag=$( awk -F= '/^VERSION_ID=/ {print tolower($2)}' /etc/os-release )
-    export CRUN_VM_TEST_ENV_BASE_IMAGE=quay.io/containerdisks/fedora:$tag
+    version=$( awk -F= '/^VERSION_ID=/ {print tolower($2)}' /etc/os-release )
+    export CRUN_VM_TEST_ENV_FEDORA_VERSION=$version
 
     tests/env.sh build
     tests/env.sh start

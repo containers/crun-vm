@@ -5,7 +5,6 @@ set -o errexit -o pipefail -o nounset
 
 start_time="$( date +%s%N )"
 
-env_image_base=${CRUN_VM_TEST_ENV_BASE_IMAGE:-"quay.io/containerdisks/fedora:40"}
 env_image=quay.io/crun-vm/test-env:latest
 container_name=crun-vm-test-env
 
@@ -135,91 +134,66 @@ build)
 
     __big_log 33 'Building test env image...'
 
-    # extract base image file
+    # build disk image
 
-    __log_and_run "$( __rel "$repo_root/util/extract-vm-image.sh" )" \
-        "$env_image_base" \
-        "$temp_dir/image"
-
-    # expand base image
-
-    __log_and_run qemu-img create -f qcow2 "$temp_dir/image.qcow2" 50G
-    __log_and_run virt-resize \
-        --quiet \
-        --expand /dev/sda4 \
-        "$temp_dir/image" \
-        "$temp_dir/image.qcow2"
-
-    rm "$temp_dir/image"
-
-    # launch VM from base image file
-
-    __log_and_run podman run \
-        --name "$container_name-build" \
-        --runtime "$runtime" \
-        --memory 8g \
-        --rm -dit \
-        --rootfs "$temp_dir" \
-        --persistent
-
-    # shellcheck disable=SC2317
-    __extra_cleanup() {
-        __log_and_run podman stop --time 0 "$container_name-build"
-    }
-
-    # customize VM
-
-    __exec() {
-        __log_and_run podman exec "$container_name-build" --as fedora "$@"
-    }
-
-    # generate an ssh keypair for users fedora and root so crun-vm containers
-    # get a predictable keypair
-    __exec 'ssh-keygen -q -f .ssh/id_rsa -N "" && sudo cp -r .ssh /root/'
-
-    __exec sudo dnf update -y
-    __exec sudo dnf install -y \
-        bash \
-        coreutils \
-        crun \
-        crun-krun \
-        docker \
-        genisoimage \
-        grep \
-        htop \
-        libselinux-devel \
-        libvirt-client \
-        libvirt-daemon-driver-qemu \
-        libvirt-daemon-log \
-        lsof \
-        openssh-clients \
-        podman \
-        qemu-img \
-        qemu-system-x86-core \
-        shadow-utils \
-        util-linux \
+    packages=(
+        bash
+        cloud-init
+        coreutils
+        crun
+        crun-krun
+        docker
+        genisoimage
+        grep
+        htop
+        libselinux-devel
+        libvirt-client
+        libvirt-daemon-driver-qemu
+        libvirt-daemon-log
+        lsof
+        openssh-clients
+        podman
+        qemu-img
+        qemu-system-x86-core
+        shadow-utils
+        util-linux
         virtiofsd
-    __exec sudo dnf clean all
+    )
+
+    packages_joined=$( printf ",%s" "${packages[@]}" )
+    packages_joined=${packages_joined:1}
 
     daemon_json='{ "runtimes": { "crun-vm": { "path": "/home/fedora/bin/crun-vm" } } }'
-    __exec sudo mkdir -p /etc/docker
-    __exec "echo ${daemon_json@Q} | sudo tee /etc/docker/daemon.json"
 
-    __exec sudo cloud-init clean --logs  # run cloud-init again on next boot
+    commands=(
+        # generate an ssh keypair for users fedora and root so crun-vm
+        # containers get a predictable keypair
+        'ssh-keygen -q -f /root/.ssh/id_rsa -N ""'
 
-    __exec sudo poweroff || true
+        "mkdir -p /etc/docker && echo ${daemon_json@Q} > /etc/docker/daemon.json"
+    )
 
-    # sparsify image file
+    __log_and_run virt-builder \
+        "fedora-${CRUN_VM_TEST_ENV_FEDORA_VERSION:-40}" \
+        --smp "$( nproc )" \
+        --memsize 4096 \
+        --format qcow2 \
+        --output "$temp_dir/image.qcow2" \
+        --size 50G \
+        --root-password password:root \
+        --install "$packages_joined" \
+        "${commands[@]/#/--run-command=}"
 
-    __log_and_run podman wait --ignore "$container_name-build"
-    __extra_cleanup() { :; }
+    # reduce image file size
 
-    __log_and_run virt-sparsify --quiet --in-place "$temp_dir/image.qcow2"
+    __log_and_run virt-sparsify --in-place "$temp_dir/image.qcow2"
+    __log_and_run qemu-img convert -f qcow2 -O qcow2 \
+        "$temp_dir/image.qcow2" "$temp_dir/image-small.qcow2"
 
     # package new image file
 
     __log_and_run "$( __rel "$repo_root/util/package-vm-image.sh" )" \
-        "$temp_dir/image.qcow2" \
+        "$temp_dir/image-small.qcow2" \
         "$env_image"
 
     __big_log 33 'Done.'
@@ -254,13 +228,16 @@ start)
         __log_and_run podman stop --time 0 "$container_name"
     }
 
-    # load test images onto VM
-
     __exec() {
         __log_and_run podman exec "$container_name" --as fedora "$@"
     }
 
     chmod a+rx "$temp_dir"  # so user "fedora" in guest can access it
+
+    __exec sudo cp /root/.ssh/id_rsa /root/.ssh/id_rsa.pub .ssh/
+    __exec sudo chown fedora:fedora . .ssh/id_rsa .ssh/id_rsa.pub
+
+    # load test images onto VM
 
     for image in "${TEST_IMAGES[@]}"; do
         __log_and_run podman pull "$image"
