@@ -110,8 +110,8 @@ __rel() {
 
 __build_runtime() {
     __big_log 33 'Building crun-vm...'
-    __log_and_run cargo build
-    runtime=$repo_root/target/debug/crun-vm
+    __log_and_run make -C "$repo_root"
+    runtime=$repo_root/bin/crun-vm
 }
 
 __extra_cleanup() { :; }
@@ -163,7 +163,7 @@ build)
     packages_joined=$( printf ",%s" "${packages[@]}" )
     packages_joined=${packages_joined:1}
 
-    daemon_json='{ "runtimes": { "crun-vm": { "path": "/home/fedora/target/debug/crun-vm" } } }'
+    daemon_json='{ "runtimes": { "crun-vm": { "path": "/home/fedora/bin/crun-vm" } } }'
 
     commands=(
         # generate an ssh keypair for users fedora and root so crun-vm
@@ -220,7 +220,7 @@ start)
         --memory 8g \
         --rm -dit \
         -v "$temp_dir":/home/fedora/images:z \
-        -v "$repo_root/target":/home/fedora/target:z \
+        -v "$repo_root/bin":/home/fedora/bin:z \
         "$env_image"
 
     # shellcheck disable=SC2317
@@ -312,11 +312,11 @@ run)
                 ;;
             podman)
                 engine_cmd=( podman )
-                runtime_in_env=/home/fedora/target/debug/crun-vm
+                runtime_in_env=/home/fedora/bin/crun-vm
                 ;;
             rootful-podman)
                 engine_cmd=( sudo podman )
-                runtime_in_env=/home/fedora/target/debug/crun-vm
+                runtime_in_env=/home/fedora/bin/crun-vm
                 ;;
             esac
 
