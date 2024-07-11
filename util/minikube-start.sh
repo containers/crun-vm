@@ -4,6 +4,7 @@
 set -o errexit -o pipefail -o nounset
 
 script_dir="$( dirname "$0" | xargs readlink -e )"
+repo_root=$script_dir/../..
 
 __minikube() {
     minikube -p=crun-vm-example "$@"
@@ -25,7 +26,7 @@ __apt_get() {
 
 # build runtime
 
-cargo build
+make -C "$repo_root"
 
 # create minikube cluster
 
@@ -57,7 +58,7 @@ __ssh 'tee --append /etc/crio/crio.conf <<EOF
 runtime_path = "/usr/local/bin/crun-vm"
 EOF'
 
-__cp "${script_dir}/../../target/debug/crun-vm" /usr/local/bin/crun-vm
+__cp "$repo_root/out/crun-vm" /usr/local/bin/crun-vm
 __ssh chmod +x /usr/local/bin/crun-vm
 
 # reload cluster so that the new runtime is picked up
