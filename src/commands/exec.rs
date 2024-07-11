@@ -8,10 +8,12 @@ use std::io::{BufReader, BufWriter};
 use anyhow::{bail, Result};
 use clap::Parser;
 
-use crate::util::crun;
+use crate::util::{crun, fix_selinux_label};
 
 pub fn exec(args: &liboci_cli::Exec, raw_args: &[impl AsRef<OsStr>]) -> Result<()> {
     assert!(args.command.is_empty());
+
+    // load exec process config
 
     let process_config_path = args.process.as_ref().expect("process config");
     let mut process: oci_spec::runtime::Process =
@@ -22,10 +24,16 @@ pub fn exec(args: &liboci_cli::Exec, raw_args: &[impl AsRef<OsStr>]) -> Result<(
     let new_command = build_command(command)?;
     process.set_args(Some(new_command));
 
+    fix_selinux_label(&mut process);
+
+    // store modified exec process config
+
     serde_json::to_writer(
         File::create(process_config_path).map(BufWriter::new)?,
         &process,
     )?;
+
+    // actually exec
 
     crun(raw_args)?;
 

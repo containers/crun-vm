@@ -1,30 +1,36 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-image="${TEST_IMAGES[fedora]}"
-user="${TEST_IMAGES_DEFAULT_USER[fedora]}"
-home="${TEST_IMAGES_DEFAULT_USER_HOME[fedora]}"
+for os in fedora fedora-bootc; do
 
-cat >"$TEMP_DIR/user-data" <<EOF
-#cloud-config
-write_files:
-  - path: $home/file
-    content: |
-      hello
+    image="${TEST_IMAGES[$os]}"
+    user="${TEST_IMAGES_DEFAULT_USER[$os]}"
+    home="${TEST_IMAGES_DEFAULT_USER_HOME[$os]}"
+
+    cat >"$TEMP_DIR/user-data" <<-EOF
+    #cloud-config
+    write_files:
+      - path: $home/file
+        content: |
+          hello
 EOF
 
-cat >"$TEMP_DIR/meta-data" <<EOF
+    cat >"$TEMP_DIR/meta-data" <<-EOF
 EOF
 
-__engine run \
-    --rm --detach \
-    --name cloud-init \
-    "$image" \
-    --cloud-init "$TEMP_DIR"
+    __engine run \
+        --rm --detach \
+        --name "$TEST_ID" \
+        "$image" \
+        --cloud-init "$TEMP_DIR"
 
-__test() {
-    __engine exec cloud-init --as "$user" "cmp $home/file <<< hello"
-}
+    __test() {
+        __engine exec "$TEST_ID" --as "$user" "cmp $home/file <<< hello"
+    }
 
-__test
-__engine restart cloud-init
-__test
+    __test
+    __engine restart "$TEST_ID"
+    __test
+
+    __engine stop "$TEST_ID"
+
+done
