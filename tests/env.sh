@@ -111,8 +111,8 @@ __rel() {
 
 __build_runtime() {
     __big_log 33 'Building crun-vm...'
-    __log_and_run cargo build
-    runtime=$repo_root/target/debug/crun-vm
+    __log_and_run make -C "$repo_root"
+    runtime=$repo_root/out/crun-vm
 }
 
 __extra_cleanup() { :; }
@@ -201,7 +201,7 @@ build)
         virtiofsd
     __exec sudo dnf clean all
 
-    daemon_json='{ "runtimes": { "crun-vm": { "path": "/home/fedora/target/debug/crun-vm" } } }'
+    daemon_json='{ "runtimes": { "crun-vm": { "path": "/home/fedora/bin/crun-vm" } } }'
     __exec sudo mkdir -p /etc/docker
     __exec "echo ${daemon_json@Q} | sudo tee /etc/docker/daemon.json"
 
@@ -246,7 +246,7 @@ start)
         --memory 8g \
         --rm -dit \
         -v "$temp_dir":/home/fedora/images:z \
-        -v "$repo_root/target":/home/fedora/target:z \
+        -v "$repo_root/out":/home/fedora/bin:z \
         "$env_image"
 
     # shellcheck disable=SC2317
@@ -331,11 +331,11 @@ run)
             case "$engine" in
             podman)
                 engine_cmd=( podman )
-                runtime_in_env=/home/fedora/target/debug/crun-vm
+                runtime_in_env=/home/fedora/bin/crun-vm
                 ;;
             rootful-podman)
                 engine_cmd=( sudo podman )
-                runtime_in_env=/home/fedora/target/debug/crun-vm
+                runtime_in_env=/home/fedora/bin/crun-vm
                 ;;
             docker)
                 engine_cmd=( sudo docker )
