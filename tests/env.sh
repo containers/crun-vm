@@ -5,26 +5,28 @@ set -o errexit -o pipefail -o nounset
 
 start_time="$( date +%s%N )"
 
-env_image_base=${CRUN_VM_TEST_ENV_BASE_IMAGE:-"quay.io/containerdisks/fedora:40"}
 env_image=quay.io/crun-vm/test-env:latest
 container_name=crun-vm-test-env
 
 declare -A TEST_IMAGES
 TEST_IMAGES=(
-    [fedora]=quay.io/containerdisks/fedora:40          # uses cloud-init
-    [coreos]=quay.io/crun-vm/example-fedora-coreos:40  # uses Ignition
+    [fedora]=quay.io/containerdisks/fedora:40               # uses cloud-init
+    [coreos]=quay.io/crun-vm/example-fedora-coreos:40       # uses Ignition
+    [fedora-bootc]=quay.io/crun-vm/example-fedora-bootc:40  # bootable container
 )
 
 declare -A TEST_IMAGES_DEFAULT_USER
 TEST_IMAGES_DEFAULT_USER=(
     [fedora]=fedora
     [coreos]=core
+    [fedora-bootc]=fedora
 )
 
 declare -A TEST_IMAGES_DEFAULT_USER_HOME
 TEST_IMAGES_DEFAULT_USER_HOME=(
     [fedora]=/home/fedora
     [coreos]=/var/home/core
+    [fedora-bootc]=/var/home/cloud-user
 )
 
 __bad_usage() {
@@ -108,8 +110,8 @@ __rel() {
 
 __build_runtime() {
     __big_log 33 'Building crun-vm...'
-    __log_and_run cargo build
-    runtime=$repo_root/target/debug/crun-vm
+    __log_and_run make -C "$repo_root"
+    runtime=$repo_root/bin/crun-vm
 }
 
 __extra_cleanup() { :; }
@@ -122,6 +124,15 @@ trap '__extra_cleanup; rm -fr "$temp_dir"' EXIT
 
 export RUST_BACKTRACE=1 RUST_LIB_BACKTRACE=1
 
+arch=$( uname -m )
+case "$arch" in
+x86_64|aarch64)
+    ;;
+*)
+    >&2 echo "Unsupported arch \"$arch\""
+    ;;
+esac
+
 case "${1:-}" in
 build)
     if (( $# != 1 )); then
@@ -132,95 +143,83 @@ build)
 
     __big_log 33 'Building test env image...'
 
-    # extract base image file
+    # build disk image
 
-    __log_and_run "$( __rel "$repo_root/util/extract-vm-image.sh" )" \
-        "$env_image_base" \
-        "$temp_dir/image"
+    case "$arch" in
+    x86_64)
+        qemu_system_pkg=qemu-system-x86-core
+        ;;
+    aarch64)
+        qemu_system_pkg=qemu-system-aarch64-core
+        ;;
+    esac
 
-    # expand base image
-
-    __log_and_run qemu-img create -f qcow2 "$temp_dir/resized-image.qcow2" 20G
-    __log_and_run virt-resize \
-        --quiet \
-        --expand /dev/sda4 \
-        "$temp_dir/image" \
-        "$temp_dir/resized-image.qcow2"
-
-    rm "$temp_dir/image"
-
-    # launch VM from base image file
-
-    __log_and_run podman run \
-        --name "$container_name-build" \
-        --runtime "$runtime" \
-        --memory 8g \
-        --rm -dit \
-        --rootfs "$temp_dir" \
-        --persistent
-
-    # shellcheck disable=SC2317
-    __extra_cleanup() {
-        __log_and_run podman stop --time 0 "$container_name-build"
-    }
-
-    # customize VM
-
-    __exec() {
-        __log_and_run podman exec "$container_name-build" --as fedora "$@"
-    }
-
-    # generate an ssh keypair for users fedora and root so crun-vm containers
-    # get a predictable keypair
-    __exec 'ssh-keygen -q -f .ssh/id_rsa -N "" && sudo cp -r .ssh /root/'
-
-    __exec sudo dnf update -y
-    __exec sudo dnf install -y \
-        bash \
-        coreutils \
-        crun \
-        docker \
-        genisoimage \
-        grep \
-        htop \
-        libselinux-devel \
-        libvirt-client \
-        libvirt-daemon-driver-qemu \
-        libvirt-daemon-log \
-        lsof \
-        openssh-clients \
-        podman \
-        qemu-img \
-        qemu-system-x86-core \
-        shadow-utils \
-        util-linux \
+    packages=(
+        bash
+        cloud-init
+        coreutils
+        crun
+        crun-krun
+        docker
+        genisoimage
+        grep
+        htop
+        libselinux-devel
+        libvirt-client
+        libvirt-daemon-driver-qemu
+        libvirt-daemon-log
+        lsof
+        openssh-clients
+        podman
+        qemu-img
+        "$qemu_system_pkg"
+        shadow-utils
+        util-linux
         virtiofsd
-    __exec sudo dnf clean all
+    )
 
-    daemon_json='{ "runtimes": { "crun-vm": { "path": "/home/fedora/target/debug/crun-vm" } } }'
-    __exec sudo mkdir -p /etc/docker
-    __exec "echo ${daemon_json@Q} | sudo tee /etc/docker/daemon.json"
+    packages_joined=$( printf ",%s" "${packages[@]}" )
+    packages_joined=${packages_joined:1}
 
-    __exec sudo cloud-init clean --logs  # run cloud-init again on next boot
+    daemon_json='{ "runtimes": { "crun-vm": { "path": "/home/fedora/bin/crun-vm" } } }'
 
-    __exec sudo poweroff || true
+    virt_builder_args=(
+        # generate an ssh keypair for users fedora and root so crun-vm
+        # containers get a predictable keypair
+        --run-command='ssh-keygen -q -f /root/.ssh/id_rsa -N ""'
 
-    # sparsify image file
+        --run-command="mkdir -p /etc/docker && echo ${daemon_json@Q} > /etc/docker/daemon.json"
+    )
 
-    __log_and_run podman wait --ignore "$container_name-build"
-    __extra_cleanup() { :; }
+    if [[ "$arch" == aarch64 ]]; then
+        # enable nested virtualization
+        virt_builder_args+=(
+            --append-line '/etc/default/grub:GRUB_CMDLINE_LINUX_DEFAULT="kvm-arm.mode=nested"'
+            --run-command 'grub2-mkconfig -o /boot/grub2/grub.cfg'
+        )
+    fi
 
-    __log_and_run virt-sparsify \
-        --quiet \
-        "$temp_dir/resized-image.qcow2" \
-        "$temp_dir/final-image.qcow2"
+    __log_and_run virt-builder \
+        "fedora-${CRUN_VM_TEST_ENV_FEDORA_VERSION:-40}" \
+        --smp "$( nproc )" \
+        --memsize 4096 \
+        --format qcow2 \
+        --output "$temp_dir/image.qcow2" \
+        --size 50G \
+        --root-password password:root \
+        --install "$packages_joined" \
+        "${virt_builder_args[@]}"
 
-    rm "$temp_dir/resized-image.qcow2"
+    # reduce image file size
+
+    __log_and_run virt-sparsify --in-place "$temp_dir/image.qcow2"
+    __log_and_run qemu-img convert -f qcow2 -O qcow2 \
+        "$temp_dir/image.qcow2" "$temp_dir/image-small.qcow2"
 
     # package new image file
 
     __log_and_run "$( __rel "$repo_root/util/package-vm-image.sh" )" \
-        "$temp_dir/final-image.qcow2" \
+        "$temp_dir/image-small.qcow2" \
         "$env_image"
 
     __big_log 33 'Done.'
@@ -247,7 +246,7 @@ start)
         --memory 8g \
         --rm -dit \
         -v "$temp_dir":/home/fedora/images:z \
-        -v "$repo_root/target":/home/fedora/target:z \
+        -v "$repo_root/bin":/home/fedora/bin:z \
         "$env_image"
 
     # shellcheck disable=SC2317
@@ -255,13 +254,20 @@ start)
         __log_and_run podman stop --time 0 "$container_name"
     }
 
-    # load test images onto VM
-
     __exec() {
         __log_and_run podman exec "$container_name" --as fedora "$@"
     }
 
+    # ensure nested hardware-accelerated virt is supported
+
+    __exec '[[ -e /dev/kvm ]] || { sudo dmesg; exit 1; }'
+
     chmod a+rx "$temp_dir"  # so user "fedora" in guest can access it
+
+    __exec sudo cp /root/.ssh/id_rsa /root/.ssh/id_rsa.pub .ssh/
+    __exec sudo chown fedora:fedora . .ssh/id_rsa .ssh/id_rsa.pub
+
+    # load test images onto VM
 
     for image in "${TEST_IMAGES[@]}"; do
         __log_and_run podman pull "$image"
@@ -336,11 +342,11 @@ run)
                 ;;
             podman)
                 engine_cmd=( podman )
-                runtime_in_env=/home/fedora/target/debug/crun-vm
+                runtime_in_env=/home/fedora/bin/crun-vm
                 ;;
             rootful-podman)
                 engine_cmd=( sudo podman )
-                runtime_in_env=/home/fedora/target/debug/crun-vm
+                runtime_in_env=/home/fedora/bin/crun-vm
                 ;;
             esac
 
@@ -393,6 +399,7 @@ run)
                 }
                 TEMP_DIR=~/$label.temp
                 UTIL_DIR=~/$label.util
+                TEST_ID=$label
                 ENGINE=$engine
                 export RUST_BACKTRACE=1 RUST_LIB_BACKTRACE=1
                 $( cat "$t" )\

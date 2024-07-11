@@ -1,0 +1,88 @@
+{
+    "ociVersion": "1.0.0",
+    "process": {
+        "terminal": true,
+        "user": { "uid": 0, "gid": 0 },
+        "args": ["/output/entrypoint.sh", "<IMAGE_NAME>"],
+        "env": [
+            "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+            "TERM=xterm"
+        ],
+        "cwd": "/",
+        "capabilities": {
+            "bounding": [],
+            "effective": [],
+            "inheritable": [],
+            "permitted": [],
+            "ambient": []
+        },
+        "rlimits": [
+            {
+                "type": "RLIMIT_NOFILE",
+                "hard": 262144,
+                "soft": 262144
+            }
+        ],
+        "noNewPrivileges": true
+    },
+    "root": {
+        "path": "<ORIGINAL_ROOT>",
+        "readonly": false
+    },
+    "hostname": "bootc-install",
+    "mounts": [
+        {
+            "type": "bind",
+            "source": "<PRIV_DIR>/root/crun-vm/bootc",
+            "destination": "/output",
+            "options": ["bind", "rprivate", "rw"]
+        },
+        {
+            "destination": "/proc",
+            "type": "proc",
+            "source": "proc"
+        },
+        {
+            "destination": "/dev/pts",
+            "type": "devpts",
+            "source": "devpts",
+            "options": [
+                "nosuid",
+                "noexec",
+                "newinstance",
+                "ptmxmode=0666",
+                "mode=0620",
+                "gid=5"
+            ]
+        }
+    ],
+    "linux": {
+        "namespaces": [
+            { "type": "pid" },
+            { "type": "network" },
+            { "type": "ipc" },
+            { "type": "uts" },
+            { "type": "cgroup" },
+            { "type": "mount" }
+        ],
+        "maskedPaths": [
+            "/proc/acpi",
+            "/proc/asound",
+            "/proc/kcore",
+            "/proc/keys",
+            "/proc/latency_stats",
+            "/proc/timer_list",
+            "/proc/timer_stats",
+            "/proc/sched_debug",
+            "/sys/firmware",
+            "/proc/scsi"
+        ],
+        "readonlyPaths": [
+            "/proc/bus",
+            "/proc/fs",
+            "/proc/irq",
+            "/proc/sys",
+            "/proc/sysrq-trigger"
+        ]
+    }
+}
