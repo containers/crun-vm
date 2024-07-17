@@ -1,0 +1,186 @@
+<!-- ENSURE THIS RENDERS WELL BOTH AS MAN PAGE AND GITHUB MARKDOWN -->
+
+# 5. crun-vm(1) -- an OCI Runtime that runs VM images
+
+<details open>
+  <summary><b>Navigation</b></summary>
+
+  1. [Installing crun-vm](1-installing.md)
+  2. [Running VMs with **Podman** or **Docker**](2-podman-docker.md)
+  3. [Running VMs as **systemd** services](3-systemd.md)
+  4. [Running VMs in **Kubernetes**](4-kubernetes.md)
+  5. ****crun-vm(1)** man page**
+     - [**SYNOPSIS**](#synopsis)
+     - [**DESCRIPTION**](#description)
+     - [**QUICK START**](#quick-start)
+     - [**CREATE/RUN USAGE**](#createrun-usage)
+     - [**CREATE/RUN OPTIONS**](#createrun-options)
+     - [**EXEC USAGE**](#exec-usage)
+     - [**EXEC OPTIONS**](#exec-options)
+     - [**ENVIRONMENT**](#environment)
+
+</details>
+
+## SYNOPSIS
+
+`podman|docker` `create|run` --runtime crun-vm [<engine_opts>...] <image_ref> [""] [<crun_vm_opts>...]<br>
+`podman|docker` `exec` [<engine_opts>...] [<crun_vm_opts>...] <cmd_and_args>...`|`""
+
+## DESCRIPTION
+
+**crun-vm** is an OCI Runtime that enables Podman, Docker, and Kubernetes to run
+QEMU-compatible Virtual Machine (VM) images.
+
+This man page enumerates the crun-vm specific options that may be used with
+Podman/Docker engine commands like `podman create` and `docker run`, and how
+they can be specified alongside standard engine options. Visit
+<https://github.com/containers/crun-vm> for additional guides.
+
+## QUICK START
+
+Launch a VM from a "containerdisk" (a disk image packaged in a container):
+
+    $ podman run --runtime crun-vm -it quay.io/containerdisks/fedora:40
+
+Launch a VM from a disk image under *my-image-dir/*:
+
+    $ podman run --runtime crun-vm -it --rootfs my-image-dir/
+
+Launch a VM from a bootable container (<https://containers.github.io/bootable/>):
+
+    $ podman run --runtime crun-vm -it quay.io/crun-vm/example-fedora-bootc:40
+
+Set the password for a VM's default user:
+
+    $ podman run --runtime crun-vm -it quay.io/containerdisks/fedora:40 \
+        --password pass  # for user "fedora"
+
+Exec (ssh) into a VM:
+
+    $ podman exec -it --latest -- --as fedora
+
+## CREATE/RUN USAGE
+
+`podman|docker` `create|run` --runtime crun-vm [<engine_opts>...] <image_ref> [""] [<crun_vm_opts>...]
+
+Standard engine options are specified in <engine_opts>.
+
+<image_ref> identifies a container image of one the following kinds:
+
+  1. A "containerdisk", i.e., a container image with a sole VM image file
+     residing under `/` or `/disk/`, such as *quay.io/containerdisks/fedora:40*;
+
+  2. The Podman-specific `--rootfs` option pointing at a directory containing a
+     sole VM image file;
+
+  3. A bootc bootable container, such as *quay.io/crun-vm/example-fedora-bootc:40*
+     (see <https://containers.github.io/bootable/> for more information).
+
+crun-vm specific options are specified in <crun_vm_opts>, i.e., where the
+command to execute in the container would usually by specified. Since this
+notion does not apply to VMs as it does to regular containers, no command should
+be specified here. However, if you're using Docker and the container you
+specified defines no default entrypoint, you have to also pass in an empty `""`
+argument to satisfy Docker's syntax.
+
+## CREATE/RUN OPTIONS
+
+All crun-vm specific options that may be passed to `podman|docker` `create|run`
+commands are listed here.
+
+These options configure the VM's environment:
+
+  * `--blockdev` source=<src_path>,target=<tgt_path>,format=<fmt_name>:
+    Expose the file or block device <src_path> at path <tgt_path> in the VM.
+    <src_path> and <tgt_path> must be absolute paths. <fmt_name> specifies the
+    QEMU-compatible image format of <src_path>, such as *raw* or *qcow2*. When
+    *format=raw*, the same effect can be achieved with the standard
+    `-m`/`--mount`/`-v`/`--volume` Podman/Docker options.
+
+  * `--persistent`:
+    When using `podman|docker` `create|run` with the standard `--rootfs` option,
+    this flag causes writes made by the VM to its disk to be persisted in the
+    user's image file. Make sure that the image is never simultaneously used by
+    another process or VM, otherwise **data corruption may occur**.
+
+  * `--bootc-disk-size` <disk_size>[KMGT]:
+    Set the disk size of the VM image generated from a bootc bootable container.
+    The default is twice the size of the container image.
+
+  * `--emulated`:
+    Emulate the VM in software rather than using KVM for hardware-assisted
+    virtualization. It's not currently possible to use this flag when the
+    container image is a bootc bootable container.
+
+These options control the VM's first-boot customization:
+
+  * `--password` <plaintext>:
+    Set the password of the VM image's default user. Only works when the VM
+    supports cloud-init.
+
+  * `--cloud-init` <config_dir>:
+    Expose the given cloud-init configuration to the VM. <config_dir> must be an
+    absolute path.
+
+  * `--ignition` <config_file>:
+    Expose the given Ignition configuration to the VM. <config_dir> must be an
+    absolute path.
+
+  * `--random-ssh-key-pair`:
+    By default, when using podman-exec, the host user's ssh key pair (if any) is
+    used to ssh into the VM. This is useful when the VM isn't easily
+    customizable at first boot but already authorizes the user's public key.
+    Otherwise, or if this flag is specified, a new random key pair is always
+    used.
+
+These options are mostly helpful when debugging crun-vm itself:
+
+  * `--merge-libvirt-xml` <xml_path>:
+    Merge the given XML file into the libvirt domain XML generated by crun-vm,
+    prior to using it to launch the VM. <xml_path> must be an absolute path.
+
+  * `--print-libvirt-xml`:
+    Print the libvirt domain XML that would be used to launch the VM, and exit
+    without launching the VM.
+
+  * `--print-config-json`:
+    Print the OCI Runtime config.json file with crun-vm's modifications that was
+    passed to *crun(1)*, and exit without launching the VM.
+
+## EXEC USAGE
+
+`podman|docker` `exec` [<engine_opts>...] [--] [<crun_vm_opts>...] <cmd_and_args>...`|`""
+
+Standard engine arguments and options are specified in <engine_opts>.
+
+crun-vm specific options are specified in <crun_vm_opts>, i.e., as a prefix to
+the command to be executed. To launch a login shell, pass `""` as the command.
+
+When using Podman's `--latest` flag instead of providing a container name or ID,
+you may need pass in `--` to delimit standard options from crun-vm specific
+options.
+
+## EXEC OPTIONS
+
+Options that may be used with `podman|docker` `exec` as a prefix to the actual
+command to run, if any:
+
+  * `--as` <user_name>:
+    The user to ssh into the VM as. Defaults to *root*.
+
+  * `--timeout` <max_secs>:
+    The timeout, in seconds, to apply to a `podman|docker` `run` command.
+    Defaults to the value of the `CRUN_VM_EXEC_TIMEOUT` environment variable if
+    set, or *0* otherwise, which means no timeout.
+
+These options are mostly helpful when debugging crun-vm itself:
+
+  * `--container`:
+    Exec into the container where the VM hypervisor is running, instead of
+    ssh'ing into the actual VM. Incompatible with `--as`.
+
+## ENVIRONMENT
+
+  * `CRUN_VM_EXEC_TIMEOUT`:
+    The timeout, in seconds, to apply to a `podman|docker` `exec` command.
+    Defaults to *0*, which means no timeout. Is overridden by `--timeout`.
