@@ -11,20 +11,23 @@ container_name=crun-vm-test-env
 
 declare -A TEST_IMAGES
 TEST_IMAGES=(
-    [fedora]=quay.io/containerdisks/fedora:40          # uses cloud-init
-    [coreos]=quay.io/crun-vm/example-fedora-coreos:40  # uses Ignition
+    [fedora]=quay.io/containerdisks/fedora:40               # uses cloud-init
+    [coreos]=quay.io/crun-vm/example-fedora-coreos:40       # uses Ignition
+    [fedora-bootc]=quay.io/crun-vm/example-fedora-bootc:40  # bootable container
 )
 
 declare -A TEST_IMAGES_DEFAULT_USER
 TEST_IMAGES_DEFAULT_USER=(
     [fedora]=fedora
     [coreos]=core
+    [fedora-bootc]=fedora
 )
 
 declare -A TEST_IMAGES_DEFAULT_USER_HOME
 TEST_IMAGES_DEFAULT_USER_HOME=(
     [fedora]=/home/fedora
     [coreos]=/var/home/core
+    [fedora-bootc]=/var/home/cloud-user
 )
 
 __bad_usage() {
@@ -140,12 +143,12 @@ build)
 
     # expand base image
 
-    __log_and_run qemu-img create -f qcow2 "$temp_dir/resized-image.qcow2" 20G
+    __log_and_run qemu-img create -f qcow2 "$temp_dir/image.qcow2" 50G
     __log_and_run virt-resize \
         --quiet \
         --expand /dev/sda4 \
         "$temp_dir/image" \
-        "$temp_dir/resized-image.qcow2"
+        "$temp_dir/image.qcow2"
 
     rm "$temp_dir/image"
 
@@ -179,6 +182,7 @@ build)
         bash \
         coreutils \
         crun \
+        crun-krun \
         docker \
         genisoimage \
         grep \
@@ -210,17 +214,12 @@ build)
     __log_and_run podman wait --ignore "$container_name-build"
     __extra_cleanup() { :; }
 
-    __log_and_run virt-sparsify \
-        --quiet \
-        "$temp_dir/resized-image.qcow2" \
-        "$temp_dir/final-image.qcow2"
-
-    rm "$temp_dir/resized-image.qcow2"
+    __log_and_run virt-sparsify --quiet --in-place "$temp_dir/image.qcow2"
 
     # package new image file
 
     __log_and_run "$( __rel "$repo_root/util/package-vm-image.sh" )" \
-        "$temp_dir/final-image.qcow2" \
+        "$temp_dir/image.qcow2" \
         "$env_image"
 
     __big_log 33 'Done.'
@@ -393,6 +392,7 @@ run)
                 }
                 TEMP_DIR=~/$label.temp
                 UTIL_DIR=~/$label.util
+                TEST_ID=$label
                 ENGINE=$engine
                 export RUST_BACKTRACE=1 RUST_LIB_BACKTRACE=1
                 $( cat "$t" )\

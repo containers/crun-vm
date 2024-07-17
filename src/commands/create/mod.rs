@@ -2,28 +2,31 @@
 
 mod custom_opts;
 mod domain;
+mod engine;
 mod first_boot;
-mod runtime_env;
 
 use std::ffi::OsStr;
 use std::fs::{self, File, Permissions};
 use std::io::ErrorKind;
 use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
+use lazy_static::lazy_static;
 use nix::sys::stat::{major, makedev, minor, mknod, Mode, SFlag};
+use regex::Regex;
 use rust_embed::RustEmbed;
 
 use crate::commands::create::custom_opts::CustomOptions;
 use crate::commands::create::domain::set_up_libvirt_domain_xml;
+use crate::commands::create::engine::Engine;
 use crate::commands::create::first_boot::FirstBootConfig;
-use crate::commands::create::runtime_env::RuntimeEnv;
 use crate::util::{
     bind_mount_dir_with_different_context, bind_mount_file, create_overlay_vm_image, crun,
-    find_single_file_in_dirs, is_mountpoint, set_file_context, SpecExt, VmImageInfo,
+    find_single_file_in_dirs, fix_selinux_label, is_mountpoint, set_file_context, SpecExt,
+    VmImageInfo,
 };
 
 pub fn create(args: &liboci_cli::Create, raw_args: &[impl AsRef<OsStr>]) -> Result<()> {
@@ -31,8 +34,101 @@ pub fn create(args: &liboci_cli::Create, raw_args: &[impl AsRef<OsStr>]) -> Resu
     let config_path = bundle_path.join("config.json");
 
     let mut spec = oci_spec::runtime::Spec::load(&config_path)?;
+    ensure_unprivileged(&spec)?;
+
     let original_root_path: Utf8PathBuf = spec.root_path()?.canonicalize()?.try_into()?; // ensure absolute
 
+    let engine = Engine::detect(&args.container_id, bundle_path, &spec, &original_root_path)?;
+    let custom_options = CustomOptions::from_spec(&spec, engine)?;
+    let is_bootc_container = is_bootc_container(&original_root_path, &custom_options, engine)?;
+
+    // We include container_id in our paths to ensure no overlap with the user container's contents.
+    let priv_dir_path = original_root_path.join(format!("crun-vm-{}", args.container_id));
+    fs::create_dir_all(&priv_dir_path)?;
+
+    if let Some(context) = spec.mount_label() {
+        // the directory we're using as the root for the container is not the one that podman
+        // prepared for us, so we need to set its context ourselves to prevent SELinux from getting
+        // angry at us
+        set_file_context(&priv_dir_path, context)?;
+    }
+
+    set_up_container_root(
+        &mut spec,
+        &priv_dir_path,
+        &custom_options,
+        is_bootc_container,
+    )?;
+
+    let is_first_create = is_first_create(&spec)?;
+
+    let base_vm_image_info = set_up_vm_image(
+        &spec,
+        &original_root_path,
+        &priv_dir_path,
+        &custom_options,
+        is_first_create,
+        is_bootc_container,
+    )?;
+
+    let mut mounts = Mounts::default();
+    set_up_mounts(&mut spec, &mut mounts)?;
+    set_up_devices(&mut spec, &mut mounts)?;
+    set_up_blockdevs(&mut spec, &mut mounts, &custom_options)?;
+
+    set_up_extra_container_mounts_and_devices(&mut spec, &custom_options)?;
+    set_up_security(&mut spec);
+
+    let ssh_pub_key = set_up_ssh_key_pair(
+        &mut spec,
+        &custom_options,
+        engine,
+        &priv_dir_path,
+        is_first_create,
+    )?;
+
+    if is_first_create {
+        set_up_first_boot_config(&spec, &mounts, &custom_options, &ssh_pub_key)?;
+        set_up_libvirt_domain_xml(&spec, &base_vm_image_info, &mounts, &custom_options)?;
+    }
+
+    adjust_container_rlimits_and_resources(&mut spec);
+
+    spec.save(&config_path)?;
+    spec.save(spec.root_path()?.join("crun-vm/config.json"))?; // to aid debugging
+
+    crun(raw_args)?; // actually create container
+
+    if is_first_create && is_bootc_container {
+        // We want to ask podman what our image name is, so we can give it to bootc-install, but we
+        // can't wait synchronously for a response since podman hangs until this create command
+        // completes. We then want to run bootc-install under krun, which already isolates the
+        // workload and so can be run outside of our container. We thus launch a process that
+        // asynchronously performs these steps, and share its progress and output with out
+        // container's entrypoint through a named pipe.
+        //
+        // Note that this process blocks until our container's entrypoint actually starts running,
+        // thus after the "start" OCI runtime command is called.
+
+        let bootc_dir = priv_dir_path.join("root/crun-vm/bootc");
+        fs::create_dir_all(&bootc_dir)?;
+
+        std::process::Command::new(bootc_dir.join("prepare.sh"))
+            .arg(engine.command().unwrap())
+            .arg(&args.container_id)
+            .arg(&original_root_path)
+            .arg(&priv_dir_path)
+            .arg(custom_options.bootc_disk_size.unwrap_or_default())
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()?;
+    }
+
+    Ok(())
+}
+
+fn ensure_unprivileged(spec: &oci_spec::runtime::Spec) -> Result<()> {
     if let Some(process) = spec.process().as_ref() {
         if let Some(capabilities) = process.capabilities().as_ref() {
             fn any_is_cap_sys_admin(caps: &Option<oci_spec::runtime::Capabilities>) -> bool {
@@ -51,60 +147,47 @@ pub fn create(args: &liboci_cli::Create, raw_args: &[impl AsRef<OsStr>]) -> Resu
         }
     }
 
-    let runtime_env = RuntimeEnv::current(&spec, &original_root_path)?;
-    let custom_options = CustomOptions::from_spec(&spec, runtime_env)?;
-
-    // We include container_id in our paths to ensure no overlap with the user container's contents.
-    let priv_dir_path = original_root_path.join(format!("crun-vm-{}", args.container_id));
-    fs::create_dir_all(&priv_dir_path)?;
-
-    if let Some(context) = spec.mount_label() {
-        // the directory we're using as the root for the container is not the one that podman
-        // prepared for us, so we need to set its context ourselves to prevent SELinux from getting
-        // angry at us
-        set_file_context(&priv_dir_path, context)?;
-    }
-
-    set_up_container_root(&mut spec, &priv_dir_path, &custom_options)?;
-    let is_first_create = is_first_create(&spec)?;
-
-    let base_vm_image_info = set_up_vm_image(
-        &spec,
-        &original_root_path,
-        &priv_dir_path,
-        &custom_options,
-        is_first_create,
-    )?;
-
-    let mut mounts = Mounts::default();
-    set_up_mounts(&mut spec, &mut mounts)?;
-    set_up_devices(&mut spec, &mut mounts)?;
-    set_up_blockdevs(&mut spec, &mut mounts, &custom_options)?;
-
-    set_up_extra_container_mounts_and_devices(&mut spec, &custom_options)?;
-    set_up_security(&mut spec);
-
-    let ssh_pub_key = set_up_ssh_key_pair(
-        &mut spec,
-        &custom_options,
-        runtime_env,
-        &priv_dir_path,
-        is_first_create,
-    )?;
-
-    if is_first_create {
-        set_up_first_boot_config(&spec, &mounts, &custom_options, &ssh_pub_key)?;
-        set_up_libvirt_domain_xml(&spec, &base_vm_image_info, &mounts, &custom_options)?;
-    }
-
-    adjust_container_rlimits_and_resources(&mut spec);
-
-    spec.save(&config_path)?;
-    spec.save(spec.root_path()?.join("crun-vm/config.json"))?; // to aid debugging
-
-    crun(raw_args)?; // actually create container
-
     Ok(())
+}
+
+fn is_bootc_container(
+    original_root_path: &Utf8Path,
+    custom_options: &CustomOptions,
+    engine: Engine,
+) -> Result<bool> {
+    let is_bootc_container = original_root_path.join("usr/lib/bootc/install").is_dir();
+
+    ensure!(
+        !is_bootc_container || engine == Engine::Podman || engine == Engine::Docker,
+        "bootc containers are only supported with Podman and Docker"
+    );
+
+    ensure!(
+        !is_bootc_container || !custom_options.emulated,
+        "--emulated is incompatible with bootable containers"
+    );
+
+    if let Some(size) = &custom_options.bootc_disk_size {
+        lazy_static! {
+            static ref SIZE_PATTERN: Regex = Regex::new(r"^[0-9]+[KMGT]?$").unwrap();
+        }
+
+        ensure!(
+            SIZE_PATTERN.is_match(size),
+            concat!(
+                "--bootc-disk-size value must be a number followed by an optional suffix K",
+                " (kilobyte, 1024), M (megabyte, 1024k), G (gigabyte, 1024M), or T (terabyte,",
+                " 1024G)",
+            )
+        );
+
+        ensure!(
+            is_bootc_container,
+            "--bootc-disk-size only applies to bootable containers"
+        );
+    }
+
+    Ok(is_bootc_container)
 }
 
 fn is_first_create(spec: &oci_spec::runtime::Spec) -> Result<bool> {
@@ -128,6 +211,7 @@ fn set_up_container_root(
     spec: &mut oci_spec::runtime::Spec,
     priv_dir_path: &Utf8Path,
     custom_options: &CustomOptions,
+    is_bootc_container: bool,
 ) -> Result<()> {
     let new_root_path = priv_dir_path.join("root");
     fs::create_dir_all(&new_root_path)?;
@@ -147,19 +231,22 @@ fn set_up_container_root(
             .unwrap(),
     ));
 
-    // set up container scripts
+    // set up container files
 
     #[derive(RustEmbed)]
-    #[folder = "scripts/"]
-    struct Scripts;
+    #[folder = "embed/"]
+    struct Embed;
 
-    for path in Scripts::iter() {
+    for path in Embed::iter() {
         let path_in_host = new_root_path.join("crun-vm").join(path.as_ref());
         fs::create_dir_all(path_in_host.parent().unwrap())?;
 
-        let file = Scripts::get(&path).unwrap();
+        let file = Embed::get(&path).unwrap();
         fs::write(&path_in_host, file.data)?;
-        fs::set_permissions(&path_in_host, Permissions::from_mode(0o755))?;
+
+        let is_script = path.as_ref().ends_with(".sh");
+        let mode = if is_script { 0o755 } else { 0o644 };
+        fs::set_permissions(&path_in_host, Permissions::from_mode(mode))?;
     }
 
     // configure container entrypoint
@@ -169,14 +256,19 @@ fn set_up_container_root(
     } else if custom_options.print_config_json {
         vec!["cat", "/crun-vm/config.json"]
     } else {
-        vec!["/crun-vm/entrypoint.sh"]
+        let arg = if is_bootc_container { "1" } else { "0" };
+        vec!["/crun-vm/entrypoint.sh", arg]
     };
 
     spec.set_process({
         let mut process = spec.process().clone().unwrap();
+
         process.set_cwd(".".into());
         process.set_command_line(None);
         process.set_args(Some(command.into_iter().map(String::from).collect()));
+
+        fix_selinux_label(&mut process);
+
         Some(process)
     });
 
@@ -189,7 +281,20 @@ fn set_up_vm_image(
     priv_dir_path: &Utf8Path,
     custom_options: &CustomOptions,
     is_first_create: bool,
+    is_bootc_container: bool,
 ) -> Result<VmImageInfo> {
+    let mirror_vm_image_path_in_container = Utf8PathBuf::from("/crun-vm/image/image");
+    let mirror_vm_image_path_in_host = spec.root_path()?.join("crun-vm/image/image");
+
+    if is_bootc_container {
+        // the image will be generated later
+        return Ok(VmImageInfo {
+            path: mirror_vm_image_path_in_container,
+            size: 0,
+            format: "qcow2".to_string(),
+        });
+    }
+
     // where inside the container to look for the VM image
     const VM_IMAGE_SEARCH_PATHS: [&str; 2] = ["./", "disk/"];
 
@@ -213,9 +318,6 @@ fn set_up_vm_image(
         fs::hard_link(vm_image_path_in_host, image_dir_path.join("image"))?;
     }
 
-    let mirror_vm_image_path_in_container = Utf8PathBuf::from("/crun-vm/image/image");
-    let mirror_vm_image_path_in_host = spec.root_path()?.join("crun-vm/image/image");
-
     if custom_options.persistent {
         // Mount overlayfs to expose the user's VM image file with a different SELinux context so we
         // can always access it, using the file's parent as the upperdir so that writes still
@@ -225,7 +327,7 @@ fn set_up_vm_image(
             bind_mount_dir_with_different_context(
                 image_dir_path,
                 mirror_vm_image_path_in_host.parent().unwrap(),
-                priv_dir_path.join("scratch"),
+                priv_dir_path.join("scratch-image"),
                 spec.mount_label(),
                 false,
             )?;
@@ -248,7 +350,7 @@ fn set_up_vm_image(
             bind_mount_dir_with_different_context(
                 image_dir_path,
                 mirror_vm_image_path_in_host.parent().unwrap(),
-                priv_dir_path.join("scratch"),
+                priv_dir_path.join("scratch-image"),
                 spec.mount_label(),
                 true,
             )?;
@@ -575,7 +677,7 @@ fn set_up_security(spec: &mut oci_spec::runtime::Spec) {
     // TODO: This doesn't seem reasonable at all. Should we just force users to use a different
     // seccomp profile? Should passt provide the option to bypass a lot of the isolation that it
     // does, given we're already in a container *and* under a seccomp profile?
-    spec.linux_seccomp_syscalls_push(
+    spec.linux_seccomp_syscalls_push_front(
         oci_spec::runtime::LinuxSyscallBuilder::default()
             .names(["mount", "pivot_root", "umount2", "unshare"].map(String::from))
             .action(oci_spec::runtime::LinuxSeccompAction::ScmpActAllow)
@@ -623,7 +725,7 @@ fn set_up_first_boot_config(
 fn set_up_ssh_key_pair(
     spec: &mut oci_spec::runtime::Spec,
     custom_options: &CustomOptions,
-    env: RuntimeEnv,
+    engine: Engine,
     priv_dir_path: &Utf8Path,
     is_first_create: bool,
 ) -> Result<String> {
@@ -641,7 +743,7 @@ fn set_up_ssh_key_pair(
     //   - We're not running under Kubernetes (where there isn't a "host user"); and
     //   - They have a key pair.
     let use_user_key_pair = !custom_options.random_ssh_key_pair
-        && env == RuntimeEnv::Other
+        && engine == Engine::Podman
         && user_ssh_dir.join("id_rsa.pub").is_file()
         && user_ssh_dir.join("id_rsa").is_file();
 

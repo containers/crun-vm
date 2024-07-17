@@ -24,7 +24,6 @@ if [[ ! -e /crun-vm/ssh-successful ]]; then
         "Connection closed by remote host"
         "Connection refused"
         "Connection reset by peer"
-        "Pseudo-terminal will not be allocated because stdin is not a terminal"
         "System is booting up"
     )
 

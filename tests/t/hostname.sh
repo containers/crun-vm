@@ -1,42 +1,42 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-for os in fedora coreos; do
+for os in "${!TEST_IMAGES[@]}"; do
 
     image="${TEST_IMAGES[$os]}"
     user="${TEST_IMAGES_DEFAULT_USER[$os]}"
 
     # default hostname
 
-    id=$( __engine run --rm --detach --name "hostname-$os-default" "$image" )
+    id=$( __engine run --rm --detach --name "$TEST_ID-$os-default" "$image" )
 
     __test() {
-        __engine exec "hostname-$os-default" --as "$user" \
+        __engine exec "$TEST_ID-$os-default" --as "$user" \
             "set -x && [[ \$( hostname ) == ${id::12} ]]"
     }
 
     __test
-    __engine restart "hostname-$os-default"
+    __engine restart "$TEST_ID-$os-default"
     __test
 
-    __engine stop --time 0 "hostname-$os-default"
+    __engine stop --time 0 "$TEST_ID-$os-default"
 
     # custom hostname
 
     __engine run \
         --rm --detach \
-        --name "hostname-$os-custom" \
+        --name "$TEST_ID-$os-custom" \
         --hostname my-test-vm \
         "$image"
 
     __test() {
-        __engine exec "hostname-$os-custom" --as "$user" \
+        __engine exec "$TEST_ID-$os-custom" --as "$user" \
             "set -x && [[ \$( hostname ) == my-test-vm ]]"
     }
 
     __test
-    __engine restart "hostname-$os-custom"
+    __engine restart "$TEST_ID-$os-custom"
     __test
 
-    __engine stop --time 0 "hostname-$os-custom"
+    __engine stop --time 0 "$TEST_ID-$os-custom"
 
 done
