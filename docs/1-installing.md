@@ -60,6 +60,7 @@ $ dnf install crun-vm
    - qemu-system-x86_64-core, qemu-system-aarch64-core, and/or other [QEMU
      system emulators](https://gitlab.com/qemu-project/qemu) for the VM
      architectures you want to support
+   - [skopeo](https://github.com/containers/skopeo)
    - ssh
    - [util-linux](https://github.com/util-linux/util-linux)
    - [virsh](https://gitlab.com/libvirt/libvirt)
