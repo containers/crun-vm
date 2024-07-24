@@ -2,7 +2,7 @@
 name = "crun-vm"
 version = "0.2.0"
 edition = "2021"
-rust-version = "1.74"
+rust-version = "1.76"
 license = "GPL-2.0-or-later"
 
 [dependencies.anyhow]
