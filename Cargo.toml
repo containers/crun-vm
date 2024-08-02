@@ -45,7 +45,7 @@ default-features = false
 features = ["runtime"]
 
 [dependencies.regex]
-version = "1.10.5"
+version = "1.10.6"
 default-features = false
 features = ["std"]
 
