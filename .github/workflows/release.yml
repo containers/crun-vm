@@ -22,7 +22,7 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
-    container: fedora:39
+    container: fedora:41
     permissions:
       contents: write
     steps:
