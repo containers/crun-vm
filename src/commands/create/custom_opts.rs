@@ -124,23 +124,23 @@ impl CustomOptions {
 
         fn path_in_container_into_path_in_host(
             spec: &oci_spec::runtime::Spec,
-            path: impl AsRef<Utf8Path>,
+            path: &Utf8Path,
         ) -> Result<Utf8PathBuf> {
             let mount = spec
                 .mounts()
                 .iter()
                 .flatten()
                 .filter(|m| m.source().is_some())
-                .filter(|m| path.as_ref().starts_with(m.destination()))
+                .filter(|m| path.starts_with(m.destination()))
                 .last()
-                .ok_or_else(|| anyhow!("can't find {}", path.as_ref()))?;
+                .ok_or_else(|| anyhow!("can't find {}", path))?;
 
             let mount_source: &Utf8Path = mount.source().as_deref().unwrap().try_into()?;
 
-            let relative_path = path.as_ref().strip_prefix(mount.destination()).unwrap();
+            let relative_path = path.strip_prefix(mount.destination()).unwrap();
             let path_in_host = mount_source.join(relative_path);
 
-            ensure!(path_in_host.try_exists()?, "can't find {}", path.as_ref());
+            ensure!(path_in_host.try_exists()?, "can't find {}", path);
 
             Ok(path_in_host)
         }
@@ -168,15 +168,15 @@ impl CustomOptions {
             }
 
             if let Some(path) = &mut options.cloud_init {
-                *path = path_in_container_into_path_in_host(spec, &path)?;
+                *path = path_in_container_into_path_in_host(spec, path)?;
             }
 
             if let Some(path) = &mut options.ignition {
-                *path = path_in_container_into_path_in_host(spec, &path)?;
+                *path = path_in_container_into_path_in_host(spec, path)?;
             }
 
             for path in &mut options.merge_libvirt_xml {
-                *path = path_in_container_into_path_in_host(spec, &path)?;
+                *path = path_in_container_into_path_in_host(spec, path)?;
             }
         }
 
