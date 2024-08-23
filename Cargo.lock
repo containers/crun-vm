@@ -322,9 +322,9 @@ checksum = "97b3888a4aecf77e811145cadf6eef5901f4782c53886191b2f693f24761847c"
 
 [[package]]
 name = "liboci-cli"
-version = "0.3.3"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03af901723a58d7b4ddf8faffe1dbd386dde949d51fe40e2d918c32e23be4d2f"
+checksum = "6450aaec0d56099f69f641e6e8d5777ce365ad66cff4e9e8ba23975693dc3166"
 dependencies = [
  "clap",
 ]
