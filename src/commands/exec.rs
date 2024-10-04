@@ -57,7 +57,15 @@ struct ExecArgs {
 }
 
 fn build_command(original_command: &Vec<String>) -> Result<Vec<String>> {
-    let mut args: ExecArgs = ExecArgs::parse_from(original_command);
+    let cmd = if original_command.first() == Some(&"--".to_string()) {
+        // Podman gobbles up a -- before the command in some cases, but not in others. Gobble it up
+        // ourselves to avoid user confusion; see https://github.com/containers/crun-vm/issues/117.
+        &original_command[1..]
+    } else {
+        &original_command
+    };
+
+    let mut args: ExecArgs = ExecArgs::parse_from(cmd);
 
     let timeout = if let Some(t) = args.timeout {
         t
