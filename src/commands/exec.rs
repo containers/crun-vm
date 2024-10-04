@@ -62,7 +62,7 @@ fn build_command(original_command: &Vec<String>) -> Result<Vec<String>> {
         // ourselves to avoid user confusion; see https://github.com/containers/crun-vm/issues/117.
         &original_command[1..]
     } else {
-        &original_command
+        original_command
     };
 
     let mut args: ExecArgs = ExecArgs::parse_from(cmd);
