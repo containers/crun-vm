@@ -57,6 +57,17 @@
         }
     ],
     "linux": {
+        "devices": [
+            {
+                "path": "/dev/kvm",
+                "type": "c",
+                "major": 10,
+                "minor": 232,
+                "fileMode": 438,
+                "uid": 0,
+                "gid": 0
+            }
+        ],
         "namespaces": [
             { "type": "pid" },
             { "type": "network" },
