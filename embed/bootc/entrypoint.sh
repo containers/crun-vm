@@ -51,7 +51,6 @@ PATH=/output/bin:$PATH bootc install to-disk \
     --via-loopback \
     --karg console=tty0 \
     --karg console=ttyS0 \
-    --karg selinux=0 \
     /output/image.raw
 
 # communicate success by creating a file, since krun always exits successfully
