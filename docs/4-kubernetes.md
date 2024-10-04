@@ -129,8 +129,8 @@ $ curl localhost:8000
 
 Options supported when using crun-vm with Podman or Docker, like `--password`,
 `--cloud-init`, and `--ignition`, are also supported here (see [2. Running VMs
-with **Podman** or **Docker**](2-podman-docker.md#execing-into-vms) for more
-information).
+with **Podman** or **Docker**](2-podman-docker.md#configuring-vms-on-first-boot)
+for more information).
 
 However, paths given to `--cloud-init` and `--ignition` are interpreted in the
 context of the VM, instead of the host. This means that first-boot configuration

@@ -16,9 +16,9 @@ These steps are detailed in the sections below.
        - [On Fedora](#on-fedora)
        - [From source](#from-source)
      - [**Making crun-vm available as a runtime**](#making-crun-vm-available-as-a-runtime)
-       - [To Podman](#to-podman)
-       - [To Docker](#to-docker)
-       - [To Kubernetes](#to-kubernetes)
+       - [For Podman](#for-podman)
+       - [For Docker](#for-docker)
+       - [For Kubernetes](#for-kubernetes)
   2. [Running VMs with **Podman** or **Docker**](2-podman-docker.md)
   3. [Running VMs as **systemd** services](3-systemd.md)
   4. [Running VMs in **Kubernetes**](4-kubernetes.md)
@@ -75,7 +75,7 @@ $ dnf install crun-vm
 
 ## Making crun-vm available as a runtime
 
-### To Podman
+### For Podman
 
 Nothing to do here, since Podman automatically recognizes crun-vm as a runtime.
 Commands like `podman create` and `podman run` can be made to use the crun-vm
@@ -91,10 +91,10 @@ Paths search by Podman:
   - `/run/current-system/sw/bin/crun-vm`
  -->
 
-See [2. Using crun-vm and **Podman** or **Docker** to run a
-VM](2-podman-docker.md) to get started.
+See [2. Running VMs with **Podman** or **Docker**](2-podman-docker.md) to get
+started.
 
-### To Docker
+### For Docker
 
 1. Merge the following configuration into `/etc/docker/daemon.json` (creating
    that directory and file if necessary):
@@ -121,7 +121,7 @@ crun-vm runtime by passing them the `--runtime crun-vm` option.
 See [2. Using crun-vm and **Podman** or **Docker** to run a
 VM](2-podman-docker.md) to get started.
 
-### To Kubernetes
+### For Kubernetes
 
 For crun-vm to be usable as a runtime in a Kubernetes cluster, the latter must
 be use the [CRI-O] runtime. See the Kubernetes docs on [runtimes] for more
@@ -150,8 +150,7 @@ information.
 Pods can then be configured to use this `RuntimeClass` by specifying its name
 under `Pod.spec.runtimeClassName`.
 
-See [4. Using crun-vm and **Pod YAML** to run a VM with **Podman**, **systemd**,
-or **Kubernetes**](4-pod-yaml.md) to get started.
+See [4. Running VMs in **Kubernetes**](4-kubernetes.md) to get started.
 
 [runtimes]: https://kubernetes.io/docs/setup/production-environment/container-runtimes/#cri-o
 [CRI-O]: https://cri-o.io/
