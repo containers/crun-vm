@@ -27,7 +27,7 @@ declare -A TEST_IMAGES_DEFAULT_USER_HOME
 TEST_IMAGES_DEFAULT_USER_HOME=(
     [fedora]=/home/fedora
     [coreos]=/var/home/core
-    [fedora-bootc]=/var/home/cloud-user
+    [fedora-bootc]=/var/home/fedora
 )
 
 __bad_usage() {
