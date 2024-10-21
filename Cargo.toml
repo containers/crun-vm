@@ -58,7 +58,7 @@ features = ["debug-embed"]
 version = "1.0.210"
 
 [dependencies.serde_json]
-version = "1.0.129"
+version = "1.0.132"
 
 [dependencies.serde_yaml]
 version = "0.9.34"
