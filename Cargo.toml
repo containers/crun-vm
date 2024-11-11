@@ -40,7 +40,7 @@ version = "1.16.0"
 default-features = false
 
 [dependencies.oci-spec]
-version = "0.7.0"
+version = "0.7.1"
 default-features = false
 features = ["runtime"]
 
