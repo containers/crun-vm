@@ -55,7 +55,7 @@ default-features = false
 features = ["debug-embed"]
 
 [dependencies.serde]
-version = "1.0.217"
+version = "1.0.218"
 
 [dependencies.serde_json]
 version = "1.0.139"
