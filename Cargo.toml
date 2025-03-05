@@ -24,7 +24,7 @@ version = "1.5.0"
 default-features = false
 
 [dependencies.liboci-cli]
-version = "0.5.1"
+version = "0.5.2"
 default-features = false
 
 [dependencies.minidom]
