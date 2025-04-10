@@ -50,7 +50,7 @@ default-features = false
 features = ["std"]
 
 [dependencies.rust-embed]
-version = "8.6.0"
+version = "8.7.0"
 default-features = false
 features = ["debug-embed"]
 
