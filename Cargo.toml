@@ -28,7 +28,7 @@ version = "0.5.3"
 default-features = false
 
 [dependencies.minidom]
-version = "0.15.2"
+version = "0.16.0"
 
 [dependencies.nix]
 version = "0.30.1"
