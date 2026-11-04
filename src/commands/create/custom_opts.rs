@@ -130,9 +130,7 @@ impl CustomOptions {
                 .mounts()
                 .iter()
                 .flatten()
-                .filter(|m| m.source().is_some())
-                .filter(|m| path.starts_with(m.destination()))
-                .last()
+                .filter(|m| m.source().is_some()).rfind(|m| path.starts_with(m.destination()))
                 .ok_or_else(|| anyhow!("can't find {}", path))?;
 
             let mount_source: &Utf8Path = mount.source().as_deref().unwrap().try_into()?;
